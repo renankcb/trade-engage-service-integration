@@ -19,24 +19,42 @@ from prometheus_client import (
     multiprocess,
 )
 
+# Initialize multiprocess collector only if PROMETHEUS_MULTIPROC_DIR is available
 registry = CollectorRegistry()
-
 prometheus_multiproc_dir = os.getenv("PROMETHEUS_MULTIPROC_DIR")
+
 if prometheus_multiproc_dir:
     try:
+        # Ensure directory exists and has correct permissions
         os.makedirs(prometheus_multiproc_dir, exist_ok=True)
 
-        if os.path.isdir(prometheus_multiproc_dir):
-            multiprocess.MultiProcessCollector(registry)
+        # Check if directory is writable
+        if os.access(prometheus_multiproc_dir, os.W_OK):
+            if os.path.isdir(prometheus_multiproc_dir):
+                try:
+                    multiprocess.MultiProcessCollector(registry)
+                    print(
+                        f"Multiprocess collector initialized successfully in {prometheus_multiproc_dir}"
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to initialize multiprocess collector: {e}")
+                    # Fallback to single process registry
+                    registry = CollectorRegistry()
+            else:
+                print(
+                    f"Warning: PROMETHEUS_MULTIPROC_DIR is not a directory: {prometheus_multiproc_dir}"
+                )
+                registry = CollectorRegistry()
         else:
             print(
-                f"Warning: PROMETHEUS_MULTIPROC_DIR is not a directory: {prometheus_multiproc_dir}"
+                f"Warning: PROMETHEUS_MULTIPROC_DIR is not writable: {prometheus_multiproc_dir}"
             )
             registry = CollectorRegistry()
     except Exception as e:
-        print(f"Warning: Failed to initialize multiprocess collector: {e}")
+        print(f"Warning: Failed to setup multiprocess collector: {e}")
         registry = CollectorRegistry()
 else:
+    print("PROMETHEUS_MULTIPROC_DIR not set, using single process registry")
     registry = CollectorRegistry()
 
 JOBS_CREATED = Counter(

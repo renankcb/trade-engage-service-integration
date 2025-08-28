@@ -18,7 +18,6 @@ class WorkerManager:
         self.db_session = db_session
         self.logger = logger
 
-        # Workers will be initialized lazily to avoid circular imports
         self.outbox_worker = None
         self.sync_worker = None
         self.poll_worker = None

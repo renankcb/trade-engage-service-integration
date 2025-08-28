@@ -121,7 +121,6 @@ class TransactionalOutbox:
             },
         )
 
-        # Flush to ensure the event is persisted in the current session
         await self.db_session.flush()
 
     async def mark_event_processing(self, event_id: UUID) -> bool:
@@ -214,11 +213,13 @@ class TransactionalOutbox:
 
         events = []
         for row in result.fetchall():
+            event_data = row[3] if isinstance(row[3], dict) else json.loads(row[3])
+
             event = OutboxEvent(
                 id=row[0],
                 event_type=OutboxEventType(row[1]),
                 aggregate_id=row[2],
-                event_data=json.loads(row[3]),
+                event_data=event_data,  # Use the already deserialized data
                 status=OutboxEventStatus(row[4]),
                 retry_count=row[5],
                 max_retries=row[6],

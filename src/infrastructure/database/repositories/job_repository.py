@@ -49,7 +49,6 @@ class JobRepository(JobRepositoryInterface):
         )
 
         self.db.add(job_model)
-        # Use flush instead of commit to maintain transaction atomicity
         await self.db.flush()
         await self.db.refresh(job_model)
 
