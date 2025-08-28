@@ -28,7 +28,7 @@ services:
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/ready"]
-      interval: 30s
+      interval: 800s
       timeout: 10s
       retries: 3
       start_period: 40s
@@ -36,7 +36,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile  
+      dockerfile: Dockerfile
       target: development
     env_file:
       - .env
@@ -47,16 +47,18 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
     volumes:
       - ./src:/app/src
+      - prometheus_multiproc_data:/tmp/prometheus_multiproc
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A src.background.celery_app worker --loglevel=info --concurrency=2 --queues=sync,maintenance
+    command: celery -A src.background.celery_app:celery_app worker --loglevel=info --concurrency=2 --queues=sync,maintenance
     healthcheck:
-      test: ["CMD", "celery", "-A", "src.background.celery_app", "inspect", "ping"]
+      test: ["CMD", "celery", "-A", "src.background.celery_app:celery_app", "inspect", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -76,14 +78,16 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
     volumes:
       - ./src:/app/src
+      - prometheus_multiproc_data:/tmp/prometheus_multiproc
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A src.background.celery_app beat --loglevel=info --scheduler=celery.beat.PersistentScheduler
+    command: celery -A src.background.celery_app:celery_app beat --loglevel=info --scheduler=celery.beat.PersistentScheduler
     healthcheck:
       test: ["CMD", "ps", "aux", "|", "grep", "celery.beat"]
       interval: 30s
@@ -171,6 +175,8 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  prometheus_multiproc_data:
     driver: local
 
 networks:

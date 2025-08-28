@@ -15,7 +15,6 @@ from src.config.settings import settings
 from src.domain.entities.job_routing import JobRouting
 from src.domain.value_objects.provider_type import ProviderType
 from src.domain.value_objects.sync_status import SyncStatus
-from src.infrastructure.monitoring.metrics import MetricsCollector
 
 logger = get_logger(__name__)
 
@@ -96,7 +95,7 @@ class PollUpdatesUseCase:
         processing_time = (datetime.utcnow() - start_time).total_seconds()
 
         # Record metrics
-        MetricsCollector.record_background_task("poll_updates", len(errors) == 0)
+        # MetricsCollector.record_background_task("poll_updates", len(errors) == 0) # Removed as per edit hint
 
         result = PollResult(
             total_polled=total_polled,

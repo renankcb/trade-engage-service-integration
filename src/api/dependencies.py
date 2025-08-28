@@ -8,11 +8,13 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.data_transformer import DataTransformer
-from src.application.services.provider_manager import ProviderManager
 from src.application.services.job_matching_engine import JobMatchingEngine
+from src.application.services.provider_manager import ProviderManager
+from src.application.services.rate_limiter import RateLimiter
+from src.application.services.retry_handler import RetryHandler
+from src.application.services.transaction_service import TransactionService
 from src.application.services.transactional_outbox import TransactionalOutbox
 from src.config.database import get_db_session
-
 from src.config.logging import get_logger
 from src.infrastructure.database.repositories.company_repository import (
     CompanyRepository,
@@ -25,8 +27,6 @@ from src.infrastructure.database.repositories.technician_repository import (
     TechnicianRepository,
 )
 from src.infrastructure.providers.factory import ProviderFactory
-from src.application.services.rate_limiter import RateLimiter
-from src.application.services.retry_handler import RetryHandler
 
 logger = get_logger(__name__)
 
@@ -91,6 +91,13 @@ async def get_transactional_outbox(
     return TransactionalOutbox(db)
 
 
+async def get_transaction_service(
+    db: AsyncSession = Depends(get_db_session),
+) -> TransactionService:
+    """Get transaction service instance."""
+    return TransactionService(db)
+
+
 async def get_rate_limiter() -> RateLimiter:
     """Get rate limiter instance."""
     return RateLimiter()  # In-memory for now, can be enhanced with Redis
@@ -101,9 +108,9 @@ async def get_retry_handler() -> RetryHandler:
     return RetryHandler()
 
 
-# Type aliases for cleaner dependency injection
-CompanyRepositoryDep = Annotated[CompanyRepository, Depends(get_company_repository)]
+# Type aliases for dependency injection
 JobRepositoryDep = Annotated[JobRepository, Depends(get_job_repository)]
+CompanyRepositoryDep = Annotated[CompanyRepository, Depends(get_company_repository)]
 JobRoutingRepositoryDep = Annotated[
     JobRoutingRepository, Depends(get_job_routing_repository)
 ]
@@ -111,8 +118,10 @@ TechnicianRepositoryDep = Annotated[
     TechnicianRepository, Depends(get_technician_repository)
 ]
 ProviderManagerDep = Annotated[ProviderManager, Depends(get_provider_manager)]
-DataTransformerDep = Annotated[DataTransformer, Depends(get_data_transformer)]
 JobMatchingEngineDep = Annotated[JobMatchingEngine, Depends(get_job_matching_engine)]
-TransactionalOutboxDep = Annotated[TransactionalOutbox, Depends(get_transactional_outbox)]
+TransactionalOutboxDep = Annotated[
+    TransactionalOutbox, Depends(get_transactional_outbox)
+]
+TransactionServiceDep = Annotated[TransactionService, Depends(get_transaction_service)]
 RateLimiterDep = Annotated[RateLimiter, Depends(get_rate_limiter)]
 RetryHandlerDep = Annotated[RetryHandler, Depends(get_retry_handler)]

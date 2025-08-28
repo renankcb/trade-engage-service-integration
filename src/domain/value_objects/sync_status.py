@@ -9,7 +9,7 @@ class SyncStatus(str, Enum):
     """Job routing sync status enumeration."""
 
     PENDING = "pending"
-    PROCESSING = "processing"  # Currently being processed by a worker
+    PROCESSING = "processing"
     SYNCED = "synced"
     FAILED = "failed"
     COMPLETED = "completed"

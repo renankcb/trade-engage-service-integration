@@ -41,21 +41,21 @@ class JobCreateRequest(BaseModel):
     summary: str = Field(..., min_length=1, max_length=1000)
     address: AddressSchema
     homeowner: HomeownerSchema
-    created_by_company_id: UUID = Field(..., description="Company that REQUESTED the job")
-    created_by_technician_id: UUID = Field(..., description="Technician that IDENTIFIED the need")
-    
+    created_by_company_id: UUID = Field(
+        ..., description="Company that REQUESTED the job"
+    )
+    created_by_technician_id: UUID = Field(
+        ..., description="Technician that IDENTIFIED the need"
+    )
+
     # Job skills and classification
     required_skills: Optional[list[str]] = Field(
-        None, 
-        description="List of skills required for this job (e.g., ['plumbing', 'electrical'])"
+        None,
+        description="List of skills required for this job (e.g., ['plumbing', 'electrical'])",
     )
     skill_levels: Optional[dict[str, str]] = Field(
-        None, 
-        description="Skill name to required level mapping (e.g., {'plumbing': 'expert', 'electrical': 'intermediate'})"
-    )
-    category: Optional[str] = Field(
-        None, 
-        description="Job category (e.g., 'plumbing', 'hvac', 'electrical', 'general')"
+        None,
+        description="Skill name to required level mapping (e.g., {'plumbing': 'expert', 'electrical': 'intermediate'})",
     )
 
 
@@ -66,11 +66,23 @@ class JobResponse(TimestampMixin):
     summary: str
     address: AddressSchema
     homeowner: HomeownerSchema
-    created_by_company_id: UUID = Field(..., description="Company that REQUESTED the job")
-    created_by_technician_id: UUID = Field(..., description="Technician that IDENTIFIED the need")
+    created_by_company_id: UUID = Field(
+        ..., description="Company that REQUESTED the job"
+    )
+    created_by_technician_id: UUID = Field(
+        ..., description="Technician that IDENTIFIED the need"
+    )
     status: str = Field(..., description="Current job status")
     revenue: Optional[float] = Field(None, description="Job revenue when completed")
-    completed_at: Optional[datetime] = Field(None, description="Job completion timestamp")
+    completed_at: Optional[datetime] = Field(
+        None, description="Job completion timestamp"
+    )
+    selected_company_id: Optional[UUID] = Field(
+        None, description="Company selected to execute the job"
+    )
+    matching_score: Optional[float] = Field(
+        None, description="Matching score for the selected company"
+    )
 
     model_config = {"from_attributes": True}
 

@@ -18,7 +18,6 @@ from src.config.settings import settings
 from src.domain.entities.job_routing import JobRouting
 from src.domain.value_objects.provider_type import ProviderType
 from src.domain.value_objects.sync_status import SyncStatus
-from src.infrastructure.monitoring.metrics import MetricsCollector
 
 logger = get_logger(__name__)
 
@@ -109,7 +108,7 @@ class BatchSyncUseCase:
         processing_time = (datetime.utcnow() - start_time).total_seconds()
 
         # Record metrics
-        MetricsCollector.record_background_task("batch_sync", successful > failed)
+        # MetricsCollector.record_background_task("batch_sync", successful > failed) # Removed MetricsCollector
 
         result = BatchSyncResult(
             total_processed=total_processed,
@@ -213,11 +212,11 @@ class BatchSyncUseCase:
                     await self.job_routing_repo.update(routing)
 
                     # Record individual metrics
-                    MetricsCollector.record_job_sync(
-                        provider_type.value,
-                        response.success,
-                        0.0,  # Duration would be calculated if needed
-                    )
+                    # MetricsCollector.record_job_sync( # Removed MetricsCollector
+                    #     provider_type.value,
+                    #     response.success,
+                    #     0.0,  # Duration would be calculated if needed
+                    # )
 
                 except Exception as e:
                     error_msg = f"Routing {routing.id} failed: {str(e)}"

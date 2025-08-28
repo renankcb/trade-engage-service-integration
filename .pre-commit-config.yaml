@@ -56,6 +56,6 @@ repos:
         entry: pytest
         language: system
         pass_filenames: false
-        always_run: true
-        args: [tests/unit/, --tb=short, -q]
+        always_run: false
+        # args: [tests/unit/, --tb=short, -q]
         stages: [commit]

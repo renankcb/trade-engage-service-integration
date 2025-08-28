@@ -35,13 +35,15 @@ class TechnicianRepository(TechnicianRepositoryInterface):
     async def create(self, technician: TechnicianModel) -> TechnicianModel:
         """Create a new technician."""
         self.session.add(technician)
-        await self.session.commit()
+        # Use flush instead of commit to maintain transaction atomicity
+        await self.session.flush()
         await self.session.refresh(technician)
         return technician
 
     async def update(self, technician: TechnicianModel) -> TechnicianModel:
         """Update an existing technician."""
-        await self.session.commit()
+        # Use flush instead of commit to maintain transaction atomicity
+        await self.session.flush()
         await self.session.refresh(technician)
         return technician
 
@@ -50,6 +52,7 @@ class TechnicianRepository(TechnicianRepositoryInterface):
         technician = await self.get_by_id(technician_id)
         if technician:
             await self.session.delete(technician)
-            await self.session.commit()
+            # Use flush instead of commit to maintain transaction atomicity
+            await self.session.flush()
             return True
         return False

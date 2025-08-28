@@ -43,7 +43,7 @@ build: ## Build Docker images
 
 up: ## Start all services
 	@echo "$(BLUE)Starting all services...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) up -d
+	docker-compose -f $(COMPOSE_FILE) up -d --build
 	@echo "$(GREEN)✅ All services started$(NC)"
 	@echo "$(YELLOW)Services available at:$(NC)"
 	@echo "  - API: http://localhost:8000"

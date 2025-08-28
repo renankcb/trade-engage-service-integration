@@ -2,7 +2,7 @@
 Job routing repository implementation.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import UUID
 
@@ -99,12 +99,11 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
 
     async def claim_pending_routings(self, limit: int = 50) -> List[JobRouting]:
         """Claim pending routings atomically to prevent duplicates.
-        
+
         This method implements a claim pattern where pending routings are
         marked as 'processing' atomically, preventing multiple workers
         from processing the same routing.
         """
-        # First, find routings that can be claimed
         stmt = (
             select(JobRoutingModel)
             .where(
@@ -115,18 +114,18 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
                     JobRoutingModel.retry_count < 3,  # Max retries
                     or_(
                         JobRoutingModel.next_retry_at.is_(None),
-                        JobRoutingModel.next_retry_at <= datetime.utcnow()
-                    )
+                        JobRoutingModel.next_retry_at <= datetime.now(timezone.utc),
+                    ),
                 )
             )
             .limit(limit)
         )
         result = await self.db.execute(stmt)
         pending_models = result.scalars().all()
-        
+
         if not pending_models:
             return []
-        
+
         # Claim these routings atomically by updating their status
         routing_ids = [model.id for model in pending_models]
         claim_stmt = (
@@ -137,20 +136,20 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
                     JobRoutingModel.sync_status.in_(
                         [SyncStatus.PENDING, SyncStatus.FAILED]
                     ),
-                    JobRoutingModel.retry_count < 3
+                    JobRoutingModel.retry_count < 3,
                 )
             )
             .values(
                 sync_status=SyncStatus.PROCESSING,
-                last_sync_attempt=datetime.utcnow(),
-                claimed_at=datetime.utcnow()
+                last_sync_attempt=datetime.now(timezone.utc),
+                claimed_at=datetime.now(timezone.utc),
             )
             .returning(JobRoutingModel.id)
         )
-        
+
         claimed_result = await self.db.execute(claim_stmt)
         claimed_ids = [row[0] for row in claimed_result.fetchall()]
-        
+
         # Fetch the claimed routings with full data
         if claimed_ids:
             claimed_stmt = (
@@ -161,18 +160,20 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             )
             claimed_result = await self.db.execute(claimed_stmt)
             claimed_models = claimed_result.scalars().all()
-            
+
             logger.info(
                 "Successfully claimed pending routings",
                 claimed_count=len(claimed_models),
-                routing_ids=[str(model.id) for model in claimed_models]
+                routing_ids=[str(model.id) for model in claimed_models],
             )
-            
+
             return [self._model_to_entity(model) for model in claimed_models]
-        
+
         return []
 
-    async def mark_sync_failed(self, routing_id: UUID, error_message: str) -> JobRouting:
+    async def mark_sync_failed(
+        self, routing_id: UUID, error_message: str
+    ) -> JobRouting:
         """Mark a job routing as failed with error message."""
         stmt = (
             update(JobRoutingModel)
@@ -180,24 +181,23 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             .values(
                 sync_status=SyncStatus.FAILED,
                 error_message=error_message,
-                last_sync_attempt=datetime.utcnow(),
+                last_sync_attempt=datetime.now(timezone.utc),
                 retry_count=JobRoutingModel.retry_count + 1,
-                next_retry_at=datetime.utcnow() + timedelta(minutes=5 * (2 ** JobRoutingModel.retry_count))
+                next_retry_at=datetime.now(timezone.utc)
+                + timedelta(minutes=5 * (2**JobRoutingModel.retry_count)),
             )
             .returning(JobRoutingModel)
         )
-        
+
         result = await self.db.execute(stmt)
         updated_model = result.scalar_one()
-        
+
         logger.info(
             "Job routing marked as failed",
             routing_id=str(routing_id),
             error_message=error_message,
-            retry_count=updated_model.retry_count
+            retry_count=updated_model.retry_count,
         )
-        
-        return self._model_to_entity(updated_model)
 
     async def find_synced_for_polling(self, limit: int = 100) -> List[JobRouting]:
         """Find synced job routings that need status polling."""
@@ -222,8 +222,8 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
                     JobRoutingModel.retry_count < 3,
                     or_(
                         JobRoutingModel.next_retry_at.is_(None),
-                        JobRoutingModel.next_retry_at <= datetime.utcnow()
-                    )
+                        JobRoutingModel.next_retry_at <= datetime.now(timezone.utc),
+                    ),
                 )
             )
             .options(selectinload(JobRoutingModel.job))
@@ -248,7 +248,7 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
                 last_synced_at=job_routing.last_synced_at,
                 next_retry_at=job_routing.next_retry_at,
                 error_message=job_routing.error_message,
-                updated_at=datetime.utcnow(),
+                updated_at=datetime.now(timezone.utc),
             )
         )
 

@@ -2,7 +2,7 @@
 Job SQLAlchemy model.
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String, Text, JSON
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -37,16 +37,11 @@ class JobModel(BaseModel):
     revenue = Column(Numeric(10, 2))
     completed_at = Column(DateTime(timezone=True))
     status = Column(String(50), default="pending", index=True)
-    
+
     # Job classification and skills
     category = Column(String(100), nullable=True, index=True)
     required_skills = Column(JSON, nullable=True)  # List of required skills
-    skill_levels = Column(JSON, nullable=True)    # skill_name -> required_level mapping
-    
-    # Job classification
-    category_id = Column(
-        UUID(as_uuid=True), ForeignKey("job_categories.id"), nullable=True, index=True
-    )
+    skill_levels = Column(JSON, nullable=True)  # skill_name -> required_level mapping
 
     # Relationships
     created_by_company = relationship("CompanyModel", back_populates="created_jobs")
@@ -57,8 +52,9 @@ class JobModel(BaseModel):
         "JobRoutingModel", back_populates="job", cascade="all, delete-orphan"
     )
     # New relationships for job classification and skills
-    category = relationship("JobCategoryModel")
-    skill_requirements = relationship("JobSkillRequirementModel", back_populates="job", cascade="all, delete-orphan")
+    skill_requirements = relationship(
+        "JobSkillRequirementModel", back_populates="job", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Job(id={self.id}, summary={self.summary[:50]}...)>"

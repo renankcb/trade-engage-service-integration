@@ -1,17 +1,24 @@
 """Create job use case."""
 
-from uuid import UUID
-from typing import List
 from dataclasses import dataclass
+from typing import List
+from uuid import UUID
 
 from src.application.interfaces.repositories import (
-    JobRepositoryInterface,
     CompanyRepositoryInterface,
-    TechnicianRepositoryInterface,
+    JobRepositoryInterface,
     JobRoutingRepositoryInterface,
+    TechnicianRepositoryInterface,
 )
-from src.application.services.job_matching_engine import JobMatchingEngine, JobRequirements
-from src.application.services.transactional_outbox import TransactionalOutbox, OutboxEventType
+from src.application.services.job_matching_engine import (
+    JobMatchingEngine,
+    JobRequirements,
+)
+from src.application.services.transaction_service import TransactionService
+from src.application.services.transactional_outbox import (
+    OutboxEventType,
+    TransactionalOutbox,
+)
 from src.config.logging import get_logger
 from src.domain.entities.job import Job
 from src.domain.entities.job_routing import JobRouting
@@ -25,6 +32,7 @@ logger = get_logger(__name__)
 @dataclass
 class CreateJobRequest:
     """Request for creating a job."""
+
     summary: str
     address: Address
     homeowner: Homeowner
@@ -38,13 +46,14 @@ class CreateJobRequest:
 @dataclass
 class CreateJobResult:
     """Result of job creation."""
+
     job: Job
-    routings: List[JobRouting]
-    matching_score: float  # Overall matching quality score
+    routing: JobRouting  # Single routing for the best matching company
+    matching_score: float  # Matching quality score for the selected company
 
 
 class CreateJobUseCase:
-    """Use case for creating a job and routing it to available companies."""
+    """Use case for creating a job and routing it to the best matching company."""
 
     def __init__(
         self,
@@ -54,6 +63,7 @@ class CreateJobUseCase:
         job_routing_repo: JobRoutingRepositoryInterface,
         matching_engine: JobMatchingEngine,
         outbox: TransactionalOutbox,
+        transaction_service: TransactionService,
     ):
         self.job_repo = job_repo
         self.company_repo = company_repo
@@ -61,102 +71,110 @@ class CreateJobUseCase:
         self.job_routing_repo = job_routing_repo
         self.matching_engine = matching_engine
         self.outbox = outbox
+        self.transaction_service = transaction_service
 
     async def execute(self, request: CreateJobRequest) -> CreateJobResult:
-        """Create a new job and route it to available companies using intelligent matching."""
-        # IMPORTANTE: Toda a operação deve ser executada em uma única transação
-        # Se qualquer parte falhar, nada é salvo (rollback automático)
-        
+        """Create a new job and route it to the best matching company using intelligent matching."""
+
         logger.info(
             "Starting job creation with intelligent matching",
             summary=request.summary,
             category=request.category,
             required_skills=request.required_skills,
             created_by_company_id=str(request.created_by_company_id),
-            created_by_technician_id=str(request.created_by_technician_id)
+            created_by_technician_id=str(request.created_by_technician_id),
         )
-        
+
         # 1. Validate requesting company exists
-        requesting_company = await self.company_repo.get_by_id(request.created_by_company_id)
+        requesting_company = await self.company_repo.get_by_id(
+            request.created_by_company_id
+        )
         if not requesting_company:
-            raise ValidationError(f"Requesting company {request.created_by_company_id} not found")
+            raise ValidationError(
+                f"Requesting company {request.created_by_company_id} not found"
+            )
 
         # 2. Validate identifying technician exists and belongs to requesting company
-        identifying_technician = await self.technician_repo.get_by_id(request.created_by_technician_id)
+        identifying_technician = await self.technician_repo.get_by_id(
+            request.created_by_technician_id
+        )
         if not identifying_technician:
-            raise ValidationError(f"Identifying technician {request.created_by_technician_id} not found")
-        
+            raise ValidationError(
+                f"Identifying technician {request.created_by_technician_id} not found"
+            )
+
         if identifying_technician.company_id != request.created_by_company_id:
-            raise ValidationError("Identifying technician does not belong to the requesting company")
+            raise ValidationError(
+                "Identifying technician does not belong to the requesting company"
+            )
 
         # 3. Validate skills and category (if provided)
         if request.required_skills:
             if not isinstance(request.required_skills, list):
                 raise ValidationError("Required skills must be a list")
-            if not all(isinstance(skill, str) and skill.strip() for skill in request.required_skills):
+            if not all(
+                isinstance(skill, str) and skill.strip()
+                for skill in request.required_skills
+            ):
                 raise ValidationError("All required skills must be non-empty strings")
-        
+
         if request.skill_levels:
             if not isinstance(request.skill_levels, dict):
                 raise ValidationError("Skill levels must be a dictionary")
             valid_levels = {"basic", "intermediate", "expert"}
             for skill, level in request.skill_levels.items():
                 if level not in valid_levels:
-                    raise ValidationError(f"Invalid skill level '{level}' for skill '{skill}'. Must be one of: {valid_levels}")
+                    raise ValidationError(
+                        f"Invalid skill level '{level}' for skill '{skill}'. Must be one of: {valid_levels}"
+                    )
 
-        # 4. Find companies using intelligent matching engine BEFORE creating job
+        # 4. Find the BEST company using intelligent matching engine BEFORE creating job
         # This ensures we don't create a job if no companies are available
         job_requirements = JobRequirements(
-            job_id=UUID('00000000-0000-0000-0000-000000000000'),  # Temporary ID for matching
+            job_id=UUID("00000000-0000-0000-0000-000000000000"),
             required_skills=request.required_skills or [],
             skill_levels=request.skill_levels or {},
             location={
                 "street": request.address.street,
                 "city": request.address.city,
                 "state": request.address.state,
-                "zip_code": request.address.zip_code
+                "zip_code": request.address.zip_code,
             },
-            category=request.category
         )
-        
+
         # Get available companies with their skills and provider info
-        available_companies = await self.company_repo.find_active_with_skills_and_providers()
-        
-        if not available_companies:
-            raise ValidationError("No active companies with provider configuration found")
-        
-        # Use matching engine to find best companies
-        company_matches = await self.matching_engine.find_matching_companies(
-            job_requirements, available_companies, max_results=10
+        available_companies = (
+            await self.company_repo.find_active_with_skills_and_providers()
         )
-        
-        # Filter out the requesting company and ensure we have valid matches
-        valid_company_matches = [
-            match for match in company_matches 
-            if match.company_id != request.created_by_company_id
-        ]
-        
-        if not valid_company_matches:
+
+        if not available_companies:
+            raise ValidationError(
+                "No active companies with provider configuration found"
+            )
+
+        # Use matching engine to find the BEST company
+        best_company_match = await self.matching_engine.find_matching_company(
+            job_requirements,
+            available_companies,
+            exclude_company_id=request.created_by_company_id,
+        )
+
+        if not best_company_match:
             raise ValidationError(
                 f"No suitable companies found for job requirements. "
                 f"Required skills: {request.required_skills or 'None'}, "
                 f"Category: {request.category or 'None'}"
             )
-        
+
         logger.info(
-            "Found suitable companies for job",
+            "Found best matching company for job",
             total_companies=len(available_companies),
-            matched_companies=len(valid_company_matches),
-            top_matching_score=max(match.score for match in valid_company_matches) if valid_company_matches else 0
+            selected_company_id=str(best_company_match.company_id),
+            matching_score=best_company_match.score,
+            matched_skills=best_company_match.matched_skills,
+            provider_type=best_company_match.provider_type,
         )
-        
-        # 5. ATOMIC OPERATION: Save job, routings, and outbox events in single transaction
-        # NOTA: Como estamos usando AsyncSession, a transação é automática
-        # Se qualquer operação falhar, o rollback acontece automaticamente
-        
-        routings = []
-        total_matching_score = 0.0
-        
+
         try:
             # 5.1. Create the job with skills and category
             job = Job(
@@ -169,79 +187,76 @@ class CreateJobUseCase:
                 created_by_technician_id=request.created_by_technician_id,
                 required_skills=request.required_skills,
                 skill_levels=request.skill_levels,
-                category=request.category
             )
-            
+
             # 5.2. Persist the job
             created_job = await self.job_repo.create(job)
-            
-            # 5.3. Create and persist routings for matched companies
-            for company_match in valid_company_matches:
-                routing = JobRouting(
-                    job_id=created_job.id,
-                    company_id_received=company_match.company_id,
-                    sync_status="pending"
-                )
-                
-                # PERSISTIR IMEDIATAMENTE para garantir atomicidade
-                persisted_routing = await self.job_routing_repo.create(routing)
-                routings.append(persisted_routing)
-                
-                # 5.4. Create outbox event for immediate sync (atomic operation)
-                # Este evento será processado pelo worker para enfileirar Celery task
-                await self.outbox.create_event(
-                    event_type=OutboxEventType.JOB_SYNC,
-                    aggregate_id=str(persisted_routing.id),
-                    event_data={
-                        "routing_id": str(persisted_routing.id),
-                        "job_id": str(created_job.id),
-                        "company_id": str(company_match.company_id),
-                        "matching_score": company_match.score,
-                        "matched_skills": company_match.matched_skills,
-                        "provider_type": company_match.provider_type
-                    }
-                )
-                
-                total_matching_score += company_match.score
-                
-                logger.debug(
-                    "Created routing and outbox event",
-                    routing_id=str(persisted_routing.id),
-                    company_id=str(company_match.company_id),
-                    matching_score=company_match.score,
-                    matched_skills=company_match.matched_skills
-                )
-            
-            # 5.5. Se chegou até aqui, todas as operações foram bem-sucedidas
-            # A transação será commitada automaticamente pelo contexto do AsyncSession
-            
+
+            # 5.3. Create and persist routing for the BEST matching company
+            routing = JobRouting(
+                job_id=created_job.id,
+                company_id_received=best_company_match.company_id,
+                sync_status="pending",
+            )
+
+            # PERSISTIR IMEDIATAMENTE para garantir atomicidade
+            persisted_routing = await self.job_routing_repo.create(routing)
+
+            # 5.4. Create outbox event for immediate sync (atomic operation)
+            # Este evento será processado pelo worker para enfileirar Celery task
+            await self.outbox.create_event(
+                event_type=OutboxEventType.JOB_SYNC,
+                aggregate_id=str(persisted_routing.id),
+                event_data={
+                    "routing_id": str(persisted_routing.id),
+                    "job_id": str(created_job.id),
+                    "company_id": str(best_company_match.company_id),
+                    "matching_score": best_company_match.score,
+                    "matched_skills": best_company_match.matched_skills,
+                    "provider_type": best_company_match.provider_type,
+                },
+            )
+
+            logger.debug(
+                "Created routing and outbox event for best matching company",
+                routing_id=str(persisted_routing.id),
+                company_id=str(best_company_match.company_id),
+                matching_score=best_company_match.score,
+                matched_skills=best_company_match.matched_skills,
+            )
+
+            # 5.5. COMMIT EXPLÍCITO para garantir que todas as operações sejam persistidas
+            # Usando o TransactionService centralizado para melhor controle
+            await self.transaction_service.commit()
+
+            logger.info(
+                "Transaction committed successfully - job, routing, and outbox event persisted",
+                job_id=str(created_job.id),
+                routing_id=str(persisted_routing.id),
+            )
+
         except Exception as e:
             # Se qualquer operação falhar, a transação será revertida automaticamente
             logger.error(
-                "Failed to create job and routings - transaction will be rolled back",
+                "Failed to create job and routing - transaction will be rolled back",
                 error=str(e),
                 job_summary=request.summary,
-                exc_info=True
+                exc_info=True,
             )
             raise ValidationError(f"Failed to create job: {str(e)}")
 
-        # Calculate average matching score
-        avg_matching_score = total_matching_score / len(routings) if routings else 0.0
-
         logger.info(
-            "Job created and routed successfully with intelligent matching",
+            "Job created and routed successfully to best matching company",
             job_id=str(created_job.id),
-            routings_count=len(routings),
             requesting_company_id=str(request.created_by_company_id),
             identifying_technician_id=str(request.created_by_technician_id),
-            avg_matching_score=avg_matching_score,
-            target_companies=[str(routing.company_id_received) for routing in routings],
+            selected_company_id=str(best_company_match.company_id),
+            matching_score=best_company_match.score,
             required_skills=request.required_skills,
-            category=request.category
         )
 
         return CreateJobResult(
-            job=created_job, 
-            routings=routings, 
-            matching_score=avg_matching_score
+            job=created_job,
+            routing=persisted_routing,
+            matching_score=best_company_match.score,
         )

@@ -49,7 +49,8 @@ class JobRepository(JobRepositoryInterface):
         )
 
         self.db.add(job_model)
-        await self.db.commit()
+        # Use flush instead of commit to maintain transaction atomicity
+        await self.db.flush()
         await self.db.refresh(job_model)
 
         return self._model_to_entity(job_model)
@@ -76,7 +77,8 @@ class JobRepository(JobRepositoryInterface):
         job_model.homeowner_email = job.homeowner_email
         job_model.updated_at = job.updated_at
 
-        await self.db.commit()
+        # Use flush instead of commit to maintain transaction atomicity
+        await self.db.flush()
         await self.db.refresh(job_model)
 
         return self._model_to_entity(job_model)
@@ -92,22 +94,23 @@ class JobRepository(JobRepositoryInterface):
     async def get_routings_by_job_id(self, job_id: str) -> List[Any]:
         """Get all routings for a specific job."""
         from src.infrastructure.database.models.job_routing import JobRoutingModel
-        
+
         # Convert string to UUID
         try:
             job_uuid = UUID(job_id)
         except ValueError:
             logger.warning("Invalid job ID format", job_id=job_id)
             return []
-        
+
         stmt = select(JobRoutingModel).where(JobRoutingModel.job_id == job_uuid)
         result = await self.db.execute(stmt)
         models = result.scalars().all()
-        
+
         # Convert to domain entities
         from src.domain.entities.job_routing import JobRouting
+
         routings = []
-        
+
         for model in models:
             routing = JobRouting(
                 id=model.id,
@@ -124,7 +127,7 @@ class JobRepository(JobRepositoryInterface):
                 updated_at=model.updated_at,
             )
             routings.append(routing)
-        
+
         return routings
 
     def _model_to_entity(self, model: JobModel) -> Job:

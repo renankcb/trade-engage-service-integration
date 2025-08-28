@@ -2,16 +2,16 @@
 Transactional Outbox Pattern implementation for atomic operations.
 """
 
+import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
-import json
-import logging
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.logging import get_logger
 
@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 
 class OutboxEventType(str, Enum):
     """Types of outbox events."""
+
     JOB_SYNC = "job_sync"
     JOB_STATUS_UPDATE = "job_status_update"
     COMPANY_SYNC = "company_sync"
@@ -28,6 +29,7 @@ class OutboxEventType(str, Enum):
 
 class OutboxEventStatus(str, Enum):
     """Status of outbox events."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -37,6 +39,7 @@ class OutboxEventStatus(str, Enum):
 @dataclass
 class OutboxEvent:
     """Outbox event for transactional operations."""
+
     id: UUID
     event_type: OutboxEventType
     aggregate_id: str  # ID of the main entity (e.g., job_id, company_id)
@@ -61,11 +64,11 @@ class TransactionalOutbox:
         event_type: OutboxEventType,
         aggregate_id: str,
         event_data: Dict[str, Any],
-        max_retries: int = 3
+        max_retries: int = 3,
     ) -> OutboxEvent:
         """
         Create an outbox event within the current transaction.
-        
+
         This method should be called within a database transaction to ensure
         atomicity between the main operation and the event creation.
         """
@@ -75,117 +78,140 @@ class TransactionalOutbox:
             aggregate_id=aggregate_id,
             event_data=event_data,
             max_retries=max_retries,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
         )
-        
+
         # Insert event into outbox table
         await self._insert_event(event)
-        
+
         self.logger.info(
             "Outbox event created",
             event_id=str(event.id),
             event_type=event.event_type.value,
-            aggregate_id=event.aggregate_id
+            aggregate_id=event.aggregate_id,
         )
-        
+
         return event
 
     async def _insert_event(self, event: OutboxEvent) -> None:
         """Insert event into the outbox table."""
-        stmt = text("""
+        stmt = text(
+            """
             INSERT INTO outbox_events (
-                id, event_type, aggregate_id, event_data, status, 
+                id, event_type, aggregate_id, event_data, status,
                 retry_count, max_retries, created_at
             ) VALUES (
                 :id, :event_type, :aggregate_id, :event_data, :status,
                 :retry_count, :max_retries, :created_at
             )
-        """)
-        
-        await self.db_session.execute(stmt, {
-            "id": event.id,
-            "event_type": event.event_type.value,
-            "aggregate_id": event.aggregate_id,
-            "event_data": json.dumps(event.event_data),
-            "status": event.status.value,
-            "retry_count": event.retry_count,
-            "max_retries": event.retry_count,
-            "created_at": event.created_at
-        })
+        """
+        )
+
+        await self.db_session.execute(
+            stmt,
+            {
+                "id": event.id,
+                "event_type": event.event_type.value,
+                "aggregate_id": event.aggregate_id,
+                "event_data": json.dumps(event.event_data),
+                "status": event.status.value,
+                "retry_count": event.retry_count,
+                "max_retries": event.retry_count,
+                "created_at": event.created_at,
+            },
+        )
+
+        # Flush to ensure the event is persisted in the current session
+        await self.db_session.flush()
 
     async def mark_event_processing(self, event_id: UUID) -> bool:
         """Mark an event as processing to prevent duplicate processing."""
-        stmt = text("""
-            UPDATE outbox_events 
+        stmt = text(
+            """
+            UPDATE outbox_events
             SET status = :status, processed_at = :processed_at
             WHERE id = :event_id AND status = :pending_status
             RETURNING id
-        """)
-        
-        result = await self.db_session.execute(stmt, {
-            "event_id": event_id,
-            "status": OutboxEventStatus.PROCESSING.value,
-            "processed_at": datetime.utcnow(),
-            "pending_status": OutboxEventStatus.PENDING.value
-        })
-        
+        """
+        )
+
+        result = await self.db_session.execute(
+            stmt,
+            {
+                "event_id": event_id,
+                "status": OutboxEventStatus.PROCESSING.value,
+                "processed_at": datetime.utcnow(),
+                "pending_status": OutboxEventStatus.PENDING.value,
+            },
+        )
+
         return result.rowcount > 0
 
     async def mark_event_completed(self, event_id: UUID) -> None:
         """Mark an event as completed."""
-        stmt = text("""
-            UPDATE outbox_events 
+        stmt = text(
+            """
+            UPDATE outbox_events
             SET status = :status, processed_at = :processed_at
             WHERE id = :event_id
-        """)
-        
-        await self.db_session.execute(stmt, {
-            "event_id": event_id,
-            "status": OutboxEventStatus.COMPLETED.value,
-            "processed_at": datetime.utcnow()
-        })
+        """
+        )
+
+        await self.db_session.execute(
+            stmt,
+            {
+                "event_id": event_id,
+                "status": OutboxEventStatus.COMPLETED.value,
+                "processed_at": datetime.utcnow(),
+            },
+        )
 
     async def mark_event_failed(self, event_id: UUID, error_message: str) -> None:
         """Mark an event as failed with error message."""
-        stmt = text("""
-            UPDATE outbox_events 
-            SET status = :status, error_message = :error_message, 
+        stmt = text(
+            """
+            UPDATE outbox_events
+            SET status = :status, error_message = :error_message,
                 retry_count = retry_count + 1, processed_at = :processed_at
             WHERE id = :event_id
-        """)
-        
-        await self.db_session.execute(stmt, {
-            "event_id": event_id,
-            "status": OutboxEventStatus.FAILED.value,
-            "error_message": error_message,
-            "processed_at": datetime.utcnow()
-        })
+        """
+        )
+
+        await self.db_session.execute(
+            stmt,
+            {
+                "event_id": event_id,
+                "status": OutboxEventStatus.FAILED.value,
+                "error_message": error_message,
+                "processed_at": datetime.utcnow(),
+            },
+        )
 
     async def get_pending_events(
-        self, 
-        event_type: Optional[OutboxEventType] = None,
-        limit: int = 100
+        self, event_type: Optional[OutboxEventType] = None, limit: int = 100
     ) -> List[OutboxEvent]:
         """Get pending events for processing."""
         where_clause = "WHERE status = :pending_status"
         params = {"pending_status": OutboxEventStatus.PENDING.value}
-        
+
         if event_type:
             where_clause += " AND event_type = :event_type"
             params["event_type"] = event_type.value
-        
-        stmt = text(f"""
+
+        stmt = text(
+            f"""
             SELECT id, event_type, aggregate_id, event_data, status,
                    retry_count, max_retries, created_at, processed_at, error_message
             FROM outbox_events
             {where_clause}
             ORDER BY created_at ASC
             LIMIT :limit
-        """)
-        
+        """
+        )
+
         params["limit"] = limit
         result = await self.db_session.execute(stmt, params)
-        
+
         events = []
         for row in result.fetchall():
             event = OutboxEvent(
@@ -198,30 +224,35 @@ class TransactionalOutbox:
                 max_retries=row[6],
                 created_at=row[7],
                 processed_at=row[8],
-                error_message=row[9]
+                error_message=row[9],
             )
             events.append(event)
-        
+
         return events
 
     async def cleanup_completed_events(self, days_old: int = 7) -> int:
         """Clean up completed events older than specified days."""
-        stmt = text("""
-            DELETE FROM outbox_events 
-            WHERE status = :completed_status 
+        stmt = text(
+            """
+            DELETE FROM outbox_events
+            WHERE status = :completed_status
             AND created_at < NOW() - INTERVAL ':days_old days'
-        """)
-        
-        result = await self.db_session.execute(stmt, {
-            "completed_status": OutboxEventStatus.COMPLETED.value,
-            "days_old": days_old
-        })
-        
+        """
+        )
+
+        result = await self.db_session.execute(
+            stmt,
+            {
+                "completed_status": OutboxEventStatus.COMPLETED.value,
+                "days_old": days_old,
+            },
+        )
+
         deleted_count = result.rowcount
         self.logger.info(
             "Cleaned up completed outbox events",
             deleted_count=deleted_count,
-            days_old=days_old
+            days_old=days_old,
         )
-        
+
         return deleted_count
