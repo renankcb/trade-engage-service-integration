@@ -324,6 +324,13 @@ quick: ## Quick start (database + API)
 	@$(MAKE) migrate
 	@$(MAKE) run-dev
 
+clean-cache: ## Clean Python cache files only
+	@echo "$(BLUE)Cleaning Python cache files...$(NC)"
+	@find . -type f -name "*.pyc" -delete
+	@find . -type d -name "__pycache__" -delete
+	@find . -type d -name "*.egg-info" -exec rm -rf {} +
+	@echo "$(GREEN)✅ Python cache cleaned$(NC)"
+
 stop: ## Stop all services and cleanup
 	@echo "$(BLUE)Stopping all services...$(NC)"
 	@$(MAKE) down

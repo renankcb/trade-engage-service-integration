@@ -2,8 +2,8 @@
 Application settings using Pydantic BaseSettings.
 """
 
-import secrets
-from typing import Any, Dict, List, Optional
+import os
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import HttpUrl, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings
@@ -23,10 +23,14 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     API_PREFIX: str = "/api/v1"
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: Union[str, List[str]] = "*"
 
     # Database
-    DATABASE_URL: PostgresDsn
+    DATABASE_URL: Optional[str] = None
+    POSTGRES_USER: Optional[str] = None
+    POSTGRES_PASSWORD: Optional[str] = None
+    POSTGRES_SERVER: Optional[str] = None
+    POSTGRES_DB: Optional[str] = None
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_ECHO: bool = False
@@ -43,10 +47,10 @@ class Settings(BaseSettings):
     CELERY_TASK_SOFT_TIME_LIMIT: int = 480  # 8 minutes
 
     # ServiceTitan API
-    SERVICETITAN_BASE_URL: HttpUrl = "https://api.servicetitan.io"
-    SERVICETITAN_CLIENT_ID: str
-    SERVICETITAN_CLIENT_SECRET: str
-    SERVICETITAN_TENANT_ID: str
+    SERVICETITAN_BASE_URL: str = "https://api.servicetitan.io"
+    SERVICETITAN_CLIENT_ID: Optional[str] = None
+    SERVICETITAN_CLIENT_SECRET: Optional[str] = None
+    SERVICETITAN_TENANT_ID: Optional[str] = None
     SERVICETITAN_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/callback"
     SERVICETITAN_SCOPE: str = "read write"
     SERVICETITAN_RATE_LIMIT_REQUESTS: int = 100
@@ -54,10 +58,10 @@ class Settings(BaseSettings):
     SERVICETITAN_REQUEST_TIMEOUT: int = 30
 
     # Security
-    SECRET_KEY: str = secrets.token_urlsafe(32)
+    SECRET_KEY: str = "your-super-secret-key-here-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     ALGORITHM: str = "HS256"
-    JWT_SECRET_KEY: str = secrets.token_urlsafe(32)
+    JWT_SECRET_KEY: str = "your-jwt-secret-key-here-change-in-production"
 
     # Monitoring
     ENABLE_METRICS: bool = True
@@ -115,25 +119,26 @@ class Settings(BaseSettings):
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
-    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            if v == "*":
+                return ["*"]
             return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
+        elif isinstance(v, list):
             return v
-        raise ValueError(v)
+        return ["*"]
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
         if isinstance(v, str):
             return v
-        return PostgresDsn.build(
-            scheme="postgresql+asyncpg",
-            user=values.get("POSTGRES_USER"),
-            password=values.get("POSTGRES_PASSWORD"),
-            host=values.get("POSTGRES_SERVER"),
-            path=f"/{values.get('POSTGRES_DB') or ''}",
-        )
+        # Build from individual components if DATABASE_URL is not provided
+        user = values.get("POSTGRES_USER", "integration_user")
+        password = values.get("POSTGRES_PASSWORD", "integration_pass")
+        host = values.get("POSTGRES_SERVER", "localhost")
+        db = values.get("POSTGRES_DB", "integration_service")
+        return f"postgresql+asyncpg://{user}:{password}@{host}:5432/{db}"
 
     @field_validator("ENVIRONMENT")
     @classmethod
