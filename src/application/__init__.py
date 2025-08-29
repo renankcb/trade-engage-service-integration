@@ -17,7 +17,6 @@ from .interfaces.repositories import (
 )
 from .services.data_transformer import DataTransformer
 from .services.provider_manager import ProviderManager
-from .services.retry_handler import RetryHandler
 from .use_cases.poll_updates import PollUpdatesUseCase
 from .use_cases.sync_job import SyncJobUseCase
 
@@ -34,7 +33,6 @@ __all__ = [
     # Services
     "DataTransformer",
     "ProviderManager",
-    "RetryHandler",
     # Use Cases
     "PollUpdatesUseCase",
     "SyncJobUseCase",

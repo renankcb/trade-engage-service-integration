@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.data_transformer import DataTransformer
 from src.application.services.job_matching_engine import JobMatchingEngine
 from src.application.services.provider_manager import ProviderManager
-from src.application.services.rate_limiter import RateLimiter
-from src.application.services.retry_handler import RetryHandler
+from src.background.workers.rate_limiter import RateLimiter
+from src.background.workers.retry_handler import RetryHandler
 from src.config.database import get_db_session
 from src.config.logging import get_logger
 from src.infrastructure.database.repositories.company_repository import (

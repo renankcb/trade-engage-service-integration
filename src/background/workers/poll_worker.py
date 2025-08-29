@@ -9,9 +9,9 @@ from uuid import UUID
 import structlog
 
 from src.application.services.provider_manager import ProviderManager
-from src.application.services.rate_limiter import RateLimiter
-from src.application.services.retry_handler import RetryHandler
 from src.application.use_cases.poll_updates import PollUpdatesUseCase
+from src.background.workers.rate_limiter import RateLimiter
+from src.background.workers.retry_handler import RetryHandler
 from src.config.logging import get_logger
 from src.infrastructure.database.repositories.company_repository import (
     CompanyRepository,

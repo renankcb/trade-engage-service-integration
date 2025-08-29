@@ -13,8 +13,8 @@ from src.application.interfaces.providers import (
     ProviderInterface,
 )
 from src.application.interfaces.repositories import CompanyRepositoryInterface
-from src.application.services.rate_limiter import RateLimiterInterface
-from src.application.services.retry_handler import RetryHandlerInterface
+from src.background.workers.rate_limiter import RateLimiterInterface
+from src.background.workers.retry_handler import RetryHandlerInterface
 from src.domain.entities.company import Company
 from src.domain.exceptions.provider_error import (
     ProviderAPIError,

@@ -66,9 +66,6 @@ class WorkerManager:
             )
             self.worker_tasks["outbox"] = outbox_task
 
-            # NOTE: SyncWorker no longer runs continuously
-            # It only executes tasks enqueued by OutboxWorker via Celery
-            # This prevents duplication and ensures proper task flow
             self.logger.info(
                 "SyncWorker configured for task execution only (no continuous processing)"
             )

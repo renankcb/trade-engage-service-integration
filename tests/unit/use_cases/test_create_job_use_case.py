@@ -9,7 +9,6 @@ from uuid import uuid4
 import pytest
 
 from src.application.services.job_matching_engine import CompanyMatch, JobRequirements
-from src.infrastructure.database.repositories.transactional_outbox_repository import OutboxEventType
 from src.application.use_cases.create_job import (
     CreateJobRequest,
     CreateJobResult,
@@ -24,6 +23,9 @@ from src.domain.value_objects.address import Address
 from src.domain.value_objects.homeowner import Homeowner
 from src.domain.value_objects.provider_type import ProviderType
 from src.domain.value_objects.sync_status import SyncStatus
+from src.infrastructure.database.repositories.transactional_outbox_repository import (
+    OutboxEventType,
+)
 
 
 class TestCreateJobUseCase:
