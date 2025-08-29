@@ -21,6 +21,7 @@ class CompanyModel(BaseModel):
         ENUM(
             ProviderType,
             name="provider_type_enum",
+            create_type=False,  # Não criar o tipo automaticamente
             values_callable=lambda obj: [e.value for e in obj],
         ),
         default=ProviderType.MOCK,
@@ -36,8 +37,14 @@ class CompanyModel(BaseModel):
         "JobRoutingModel", back_populates="company_received"
     )
     # New relationships for provider association and skills
-    provider_associations = relationship("CompanyProviderAssociationModel", back_populates="company", cascade="all, delete-orphan")
-    skills = relationship("CompanySkillModel", back_populates="company", cascade="all, delete-orphan")
+    provider_associations = relationship(
+        "CompanyProviderAssociationModel",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    skills = relationship(
+        "CompanySkillModel", back_populates="company", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return (

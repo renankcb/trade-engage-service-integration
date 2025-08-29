@@ -3,13 +3,13 @@ ServiceTitan data models and DTOs.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 
 @dataclass
 class ServiceTitanLeadRequest:
     """ServiceTitan lead creation request."""
-    
+
     summary: str
     customer_name: str
     customer_phone: str
@@ -25,7 +25,7 @@ class ServiceTitanLeadRequest:
 @dataclass
 class ServiceTitanLeadResponse:
     """ServiceTitan lead creation response."""
-    
+
     id: str
     status: str
     created_at: str
@@ -36,7 +36,7 @@ class ServiceTitanLeadResponse:
 @dataclass
 class ServiceTitanCustomerRequest:
     """ServiceTitan customer creation request."""
-    
+
     name: str
     phone: str
     email: str
@@ -49,7 +49,7 @@ class ServiceTitanCustomerRequest:
 @dataclass
 class ServiceTitanLocationRequest:
     """ServiceTitan location creation request."""
-    
+
     customer_id: str
     address: str
     city: str
@@ -61,7 +61,7 @@ class ServiceTitanLocationRequest:
 @dataclass
 class ServiceTitanJobRequest:
     """ServiceTitan job creation request."""
-    
+
     customer_id: str
     location_id: str
     summary: str
@@ -73,7 +73,7 @@ class ServiceTitanJobRequest:
 @dataclass
 class ServiceTitanJobResponse:
     """ServiceTitan job creation response."""
-    
+
     id: str
     status: str
     created_at: str
@@ -85,7 +85,7 @@ class ServiceTitanJobResponse:
 @dataclass
 class ServiceTitanStatusResponse:
     """ServiceTitan job status response."""
-    
+
     id: str
     status: str
     is_completed: bool
@@ -97,7 +97,7 @@ class ServiceTitanStatusResponse:
 @dataclass
 class ServiceTitanErrorResponse:
     """ServiceTitan error response."""
-    
+
     error: str
     message: str
     details: Optional[Dict[str, Any]] = None

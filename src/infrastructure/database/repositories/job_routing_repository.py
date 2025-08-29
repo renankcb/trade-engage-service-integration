@@ -32,9 +32,10 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             job_id=job_routing.job_id,
             company_id_received=job_routing.company_id_received,
             external_id=job_routing.external_id,
-            sync_status=job_routing.sync_status,
+            sync_status=job_routing.sync_status.value
+            if hasattr(job_routing.sync_status, "value")
+            else job_routing.sync_status,
             retry_count=job_routing.retry_count,
-            last_sync_attempt=job_routing.last_sync_attempt,
             last_synced_at=job_routing.last_synced_at,
             error_message=job_routing.error_message,
         )
@@ -83,7 +84,7 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             .where(
                 and_(
                     JobRoutingModel.sync_status.in_(
-                        [SyncStatus.PENDING, SyncStatus.FAILED]
+                        [SyncStatus.PENDING.value, SyncStatus.FAILED.value]
                     ),
                     JobRoutingModel.retry_count < 3,  # Max retries
                 )
@@ -109,7 +110,7 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             .where(
                 and_(
                     JobRoutingModel.sync_status.in_(
-                        [SyncStatus.PENDING, SyncStatus.FAILED]
+                        [SyncStatus.PENDING.value, SyncStatus.FAILED.value]
                     ),
                     JobRoutingModel.retry_count < 3,  # Max retries
                     or_(
@@ -134,14 +135,13 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
                 and_(
                     JobRoutingModel.id.in_(routing_ids),
                     JobRoutingModel.sync_status.in_(
-                        [SyncStatus.PENDING, SyncStatus.FAILED]
+                        [SyncStatus.PENDING.value, SyncStatus.FAILED.value]
                     ),
                     JobRoutingModel.retry_count < 3,
                 )
             )
             .values(
-                sync_status=SyncStatus.PROCESSING,
-                last_sync_attempt=datetime.now(timezone.utc),
+                sync_status=SyncStatus.PROCESSING.value,
                 claimed_at=datetime.now(timezone.utc),
             )
             .returning(JobRoutingModel.id)
@@ -179,9 +179,8 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             update(JobRoutingModel)
             .where(JobRoutingModel.id == routing_id)
             .values(
-                sync_status=SyncStatus.FAILED,
+                sync_status=SyncStatus.FAILED.value,
                 error_message=error_message,
-                last_sync_attempt=datetime.now(timezone.utc),
                 retry_count=JobRoutingModel.retry_count + 1,
                 next_retry_at=datetime.now(timezone.utc)
                 + timedelta(minutes=5 * (2**JobRoutingModel.retry_count)),
@@ -203,7 +202,7 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
         """Find synced job routings that need status polling."""
         stmt = (
             select(JobRoutingModel)
-            .where(JobRoutingModel.sync_status == SyncStatus.SYNCED)
+            .where(JobRoutingModel.sync_status == SyncStatus.SYNCED.value)
             .options(selectinload(JobRoutingModel.company_received))
             .limit(limit)
         )
@@ -218,7 +217,7 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             select(JobRoutingModel)
             .where(
                 and_(
-                    JobRoutingModel.sync_status == SyncStatus.FAILED,
+                    JobRoutingModel.sync_status == SyncStatus.FAILED.value,
                     JobRoutingModel.retry_count < 3,
                     or_(
                         JobRoutingModel.next_retry_at.is_(None),
@@ -242,9 +241,10 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             .where(JobRoutingModel.id == job_routing.id)
             .values(
                 external_id=job_routing.external_id,
-                sync_status=job_routing.sync_status,
+                sync_status=job_routing.sync_status.value
+                if hasattr(job_routing.sync_status, "value")
+                else job_routing.sync_status,
                 retry_count=job_routing.retry_count,
-                last_sync_attempt=job_routing.last_sync_attempt,
                 last_synced_at=job_routing.last_synced_at,
                 next_retry_at=job_routing.next_retry_at,
                 error_message=job_routing.error_message,
@@ -283,7 +283,6 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             external_id=model.external_id,
             sync_status=model.sync_status,
             retry_count=model.retry_count,
-            last_sync_attempt=model.last_sync_attempt,
             last_synced_at=model.last_synced_at,
             next_retry_at=model.next_retry_at,
             error_message=model.error_message,

@@ -39,7 +39,6 @@ class JobModel(BaseModel):
     status = Column(String(50), default="pending", index=True)
 
     # Job classification and skills
-    category = Column(String(100), nullable=True, index=True)
     required_skills = Column(JSON, nullable=True)  # List of required skills
     skill_levels = Column(JSON, nullable=True)  # skill_name -> required_level mapping
 

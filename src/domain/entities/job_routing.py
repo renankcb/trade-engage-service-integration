@@ -3,7 +3,7 @@ Job routing domain entity.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -22,20 +22,19 @@ class JobRouting:
     sync_status: SyncStatus = SyncStatus.PENDING
     retry_count: int = 0
     total_sync_attempts: int = 0
-    last_sync_attempt: Optional[datetime] = None
     last_synced_at: Optional[datetime] = None
     next_retry_at: Optional[datetime] = None
     error_message: Optional[str] = None
-    claimed_at: Optional[datetime] = None  # When this routing was claimed for processing
+    claimed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     def __post_init__(self):
         """Initialize timestamps."""
         if not self.created_at:
-            self.created_at = datetime.utcnow()
+            self.created_at = datetime.now(timezone.utc)
         if not self.updated_at:
-            self.updated_at = datetime.utcnow()
+            self.updated_at = datetime.now(timezone.utc)
 
     def can_sync(self) -> bool:
         """Check if job routing can be synced."""
@@ -54,9 +53,8 @@ class JobRouting:
                 str(self.sync_status), "pending or failed with retries available"
             )
 
-        self.last_sync_attempt = datetime.utcnow()
         self.total_sync_attempts += 1
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def mark_sync_success(self, external_id: str) -> None:
         """Mark sync as successful."""
@@ -65,22 +63,25 @@ class JobRouting:
 
         self.external_id = external_id
         self.sync_status = SyncStatus.SYNCED
-        self.last_synced_at = datetime.utcnow()
+        self.last_synced_at = datetime.now(timezone.utc)
         self.error_message = None
         self.next_retry_at = None
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
+        self.last_synced_at = datetime.now(timezone.utc)
 
     def mark_sync_failed(self, error_message: str) -> None:
         """Mark sync as failed and calculate next retry time."""
         self.sync_status = SyncStatus.FAILED
         self.retry_count += 1
         self.error_message = error_message
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
         # Calculate next retry time with exponential backoff
         if self.retry_count <= 3:
             backoff_minutes = 2 ** (self.retry_count - 1) * 5  # 5, 10, 20 minutes
-            self.next_retry_at = datetime.utcnow() + timedelta(minutes=backoff_minutes)
+            self.next_retry_at = datetime.now(timezone.utc) + timedelta(
+                minutes=backoff_minutes
+            )
         else:
             self.next_retry_at = None
 
@@ -90,8 +91,8 @@ class JobRouting:
             raise SyncStatusError(str(self.sync_status), "synced")
 
         self.sync_status = SyncStatus.COMPLETED
-        self.last_synced_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.last_synced_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
 
     def should_retry(self) -> bool:
         """Check if sync should be retried."""
@@ -101,7 +102,7 @@ class JobRouting:
         if not self.next_retry_at:
             return False
 
-        return datetime.utcnow() >= self.next_retry_at
+        return datetime.now(timezone.utc) >= self.next_retry_at
 
     def reset_for_retry(self) -> None:
         """Reset routing for retry."""
@@ -112,7 +113,7 @@ class JobRouting:
 
         self.sync_status = SyncStatus.PENDING
         self.error_message = None
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def is_duplicate_lead(self, external_id: str) -> bool:
         """Check if this routing represents a duplicate lead."""

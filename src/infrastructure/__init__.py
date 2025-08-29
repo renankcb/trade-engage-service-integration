@@ -18,7 +18,6 @@ __all__ = [
     "get_database_health",
     "test_database_connection",
     "close_database_connections",
-    
     # External
     "HTTPClient",
     "make_http_request",
@@ -26,7 +25,6 @@ __all__ = [
     "ExternalRateLimiter",
     "external_rate_limiter",
     "get_external_rate_limiter",
-    
     # Monitoring
     "HealthChecker",
     "health_checker",
@@ -37,12 +35,10 @@ __all__ = [
     "get_metrics_collector",
     "record_job_metrics",
     "record_provider_metrics",
-    
     # Providers
     "ProviderFactory",
     "MockProvider",
     "ServiceTitanProvider",
-    
     # Queue
     "JobQueueInterface",
     "InMemoryJobQueue",

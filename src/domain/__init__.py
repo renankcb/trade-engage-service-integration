@@ -13,17 +13,14 @@ __all__ = [
     "Job",
     "JobRouting",
     "Technician",
-    
     # Events
     "JobRouted",
     "SyncCompleted",
     "SyncFailed",
-    
     # Exceptions
     "ProviderError",
     "SyncError",
     "ValidationError",
-    
     # Value Objects
     "Address",
     "ProviderType",

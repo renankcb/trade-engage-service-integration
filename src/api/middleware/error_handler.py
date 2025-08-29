@@ -18,11 +18,11 @@ logger = get_logger(__name__)
 
 class ErrorHandlerMiddleware:
     """Error handling middleware for FastAPI."""
-    
+
     def __init__(self, app: FastAPI):
         self.app = app
         self.add_error_handlers()
-    
+
     def add_error_handlers(self) -> None:
         """Add custom error handlers to FastAPI app."""
 

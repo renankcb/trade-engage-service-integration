@@ -19,7 +19,6 @@ class WorkerManager:
         self.logger = logger
 
         self.outbox_worker = None
-        self.sync_worker = None
         self.poll_worker = None
 
         # Worker tasks
@@ -40,17 +39,6 @@ class WorkerManager:
             outbox_service = TransactionalOutbox(async_session_factory())
             self.outbox_worker = OutboxWorker(outbox_service)
         return self.outbox_worker
-
-    def _get_sync_worker(self):
-        """Lazy initialization of sync worker."""
-        if self.sync_worker is None:
-            from src.background.workers.sync_worker import SyncWorker
-
-            # Create a new session for the sync worker
-            from src.config.database import async_session_factory
-
-            self.sync_worker = SyncWorker(async_session_factory())
-        return self.sync_worker
 
     def _get_poll_worker(self):
         """Lazy initialization of poll worker."""
@@ -75,17 +63,19 @@ class WorkerManager:
             )
             self.worker_tasks["outbox"] = outbox_task
 
-            # Start sync worker (processes every 60 seconds)
-            sync_worker = self._get_sync_worker()
-            sync_task = asyncio.create_task(
-                sync_worker.start_continuous_sync(interval_seconds=60)
+            # NOTE: SyncWorker no longer runs continuously
+            # It only executes tasks enqueued by OutboxWorker via Celery
+            # This prevents duplication and ensures proper task flow
+            self.logger.info(
+                "SyncWorker configured for task execution only (no continuous processing)"
             )
-            self.worker_tasks["sync"] = sync_task
 
-            # Start poll worker (processes every 5 minutes)
+            # Start poll worker (processes every 1 minute)
             poll_worker = self._get_poll_worker()
             poll_task = asyncio.create_task(
-                poll_worker.start_continuous_polling(interval_seconds=300)
+                poll_worker.start_continuous_polling(
+                    interval_seconds=60
+                )  # ✅ ALTERADO: de 300s para 60s
             )
             self.worker_tasks["poll"] = poll_task
 
@@ -107,8 +97,6 @@ class WorkerManager:
             # Stop workers
             if self.outbox_worker:
                 self.outbox_worker.stop_continuous_processing()
-            if self.sync_worker:
-                self.sync_worker.stop_continuous_sync()
             if self.poll_worker:
                 self.poll_worker.stop_continuous_polling()
 
@@ -141,9 +129,6 @@ class WorkerManager:
             "outbox_worker": self._get_outbox_worker().get_stats()
             if self.outbox_worker
             else {},
-            "sync_worker": self._get_sync_worker().get_stats()
-            if self.sync_worker
-            else {},
             "poll_worker": self._get_poll_worker().get_stats()
             if self.poll_worker
             else {},
@@ -162,14 +147,6 @@ class WorkerManager:
                     if self.outbox_worker
                     else {},
                 },
-                "sync": {
-                    "status": "running"
-                    if self.sync_worker and self.sync_worker.is_running
-                    else "stopped",
-                    "stats": self._get_sync_worker().get_stats()
-                    if self.sync_worker
-                    else {},
-                },
                 "poll": {
                     "status": "running"
                     if self.poll_worker and self.poll_worker.is_running
@@ -180,9 +157,6 @@ class WorkerManager:
                 },
             },
             "circuit_breakers": {
-                "sync": self._get_sync_worker().get_circuit_breaker_status()
-                if self.sync_worker
-                else {},
                 "poll": self._get_poll_worker().get_circuit_breaker_status()
                 if self.poll_worker
                 else {},
@@ -205,18 +179,6 @@ class WorkerManager:
                     outbox_worker.start_continuous_processing(interval_seconds=30)
                 )
                 self.worker_tasks["outbox"] = outbox_task
-
-            elif worker_name == "sync":
-                # Stop current task
-                if "sync" in self.worker_tasks:
-                    self.worker_tasks["sync"].cancel()
-
-                # Start new task
-                sync_worker = self._get_sync_worker()
-                sync_task = asyncio.create_task(
-                    sync_worker.start_continuous_sync(interval_seconds=60)
-                )
-                self.worker_tasks["sync"] = sync_task
 
             elif worker_name == "poll":
                 # Stop current task

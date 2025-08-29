@@ -81,7 +81,7 @@ class CompanyRepositoryInterface(ABC):
     async def find_active_with_skills_and_providers(self) -> List[dict]:
         """
         Find active companies with their skills and provider information.
-        
+
         Returns:
             List of dictionaries containing company data with skills and provider info
             for intelligent job matching.

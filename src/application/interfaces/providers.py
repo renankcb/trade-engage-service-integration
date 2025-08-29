@@ -42,7 +42,7 @@ class JobStatusResponse:
 @dataclass
 class ProviderHealthStatus:
     """Provider health status information."""
-    
+
     is_healthy: bool
     status_message: str
     last_check: str

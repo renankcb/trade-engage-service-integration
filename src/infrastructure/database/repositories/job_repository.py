@@ -118,7 +118,6 @@ class JobRepository(JobRepositoryInterface):
                 external_id=model.external_id,
                 sync_status=model.sync_status,
                 retry_count=model.retry_count,
-                last_sync_attempt=model.last_sync_attempt,
                 last_synced_at=model.last_synced_at,
                 next_retry_at=model.next_retry_at,
                 error_message=model.error_message,

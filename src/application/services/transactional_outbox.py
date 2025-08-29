@@ -5,7 +5,7 @@ Transactional Outbox Pattern implementation for atomic operations.
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -42,7 +42,7 @@ class OutboxEvent:
 
     id: UUID
     event_type: OutboxEventType
-    aggregate_id: str  # ID of the main entity (e.g., job_id, company_id)
+    aggregate_id: str
     event_data: Dict[str, Any]
     status: OutboxEventStatus = OutboxEventStatus.PENDING
     retry_count: int = 0
@@ -78,7 +78,7 @@ class TransactionalOutbox:
             aggregate_id=aggregate_id,
             event_data=event_data,
             max_retries=max_retries,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         # Insert event into outbox table
@@ -116,7 +116,7 @@ class TransactionalOutbox:
                 "event_data": json.dumps(event.event_data),
                 "status": event.status.value,
                 "retry_count": event.retry_count,
-                "max_retries": event.retry_count,
+                "max_retries": event.max_retries,
                 "created_at": event.created_at,
             },
         )
@@ -139,10 +139,12 @@ class TransactionalOutbox:
             {
                 "event_id": event_id,
                 "status": OutboxEventStatus.PROCESSING.value,
-                "processed_at": datetime.utcnow(),
+                "processed_at": datetime.now(timezone.utc),
                 "pending_status": OutboxEventStatus.PENDING.value,
             },
         )
+
+        await self.db_session.commit()
 
         return result.rowcount > 0
 
@@ -161,9 +163,11 @@ class TransactionalOutbox:
             {
                 "event_id": event_id,
                 "status": OutboxEventStatus.COMPLETED.value,
-                "processed_at": datetime.utcnow(),
+                "processed_at": datetime.now(timezone.utc),
             },
         )
+
+        await self.db_session.commit()
 
     async def mark_event_failed(self, event_id: UUID, error_message: str) -> None:
         """Mark an event as failed with error message."""
@@ -182,14 +186,24 @@ class TransactionalOutbox:
                 "event_id": event_id,
                 "status": OutboxEventStatus.FAILED.value,
                 "error_message": error_message,
-                "processed_at": datetime.utcnow(),
+                "processed_at": datetime.now(timezone.utc),
             },
         )
+
+        await self.db_session.commit()
 
     async def get_pending_events(
         self, event_type: Optional[OutboxEventType] = None, limit: int = 100
     ) -> List[OutboxEvent]:
         """Get pending events for processing."""
+        # Build query parts separately for better readability
+        select_fields = """
+            id, event_type, aggregate_id, event_data, status,
+            retry_count, max_retries, created_at, processed_at, error_message
+        """
+
+        from_table = "FROM outbox_events"
+
         where_clause = "WHERE status = :pending_status"
         params = {"pending_status": OutboxEventStatus.PENDING.value}
 
@@ -197,39 +211,63 @@ class TransactionalOutbox:
             where_clause += " AND event_type = :event_type"
             params["event_type"] = event_type.value
 
+        order_by = "ORDER BY created_at ASC"
+        limit_clause = "LIMIT :limit"
+
+        # Construct the complete query
         stmt = text(
             f"""
-            SELECT id, event_type, aggregate_id, event_data, status,
-                   retry_count, max_retries, created_at, processed_at, error_message
-            FROM outbox_events
+            SELECT {select_fields}
+            {from_table}
             {where_clause}
-            ORDER BY created_at ASC
-            LIMIT :limit
-        """
+            {order_by}
+            {limit_clause}
+            """
         )
 
         params["limit"] = limit
-        result = await self.db_session.execute(stmt, params)
 
-        events = []
-        for row in result.fetchall():
-            event_data = row[3] if isinstance(row[3], dict) else json.loads(row[3])
+        try:
+            result = await self.db_session.execute(stmt, params)
 
-            event = OutboxEvent(
-                id=row[0],
-                event_type=OutboxEventType(row[1]),
-                aggregate_id=row[2],
-                event_data=event_data,  # Use the already deserialized data
-                status=OutboxEventStatus(row[4]),
-                retry_count=row[5],
-                max_retries=row[6],
-                created_at=row[7],
-                processed_at=row[8],
-                error_message=row[9],
+            events = []
+            for row in result.fetchall():
+                # PostgreSQL JSON columns are automatically deserialized to Python objects
+                # So row[3] (event_data) is already a dict, not a JSON string
+                event_data = row[3] if isinstance(row[3], dict) else json.loads(row[3])
+
+                event = OutboxEvent(
+                    id=row[0],
+                    event_type=OutboxEventType(row[1]),
+                    aggregate_id=row[2],
+                    event_data=event_data,
+                    status=OutboxEventStatus(row[4]),
+                    retry_count=row[5],
+                    max_retries=row[6],
+                    created_at=row[7],
+                    processed_at=row[8],
+                    error_message=row[9],
+                )
+                events.append(event)
+
+            self.logger.info(
+                "Retrieved pending outbox events",
+                count=len(events),
+                event_type=event_type.value if event_type else None,
+                limit=limit,
             )
-            events.append(event)
 
-        return events
+            return events
+
+        except Exception as e:
+            self.logger.error(
+                "Error retrieving pending outbox events",
+                error=str(e),
+                event_type=event_type.value if event_type else None,
+                limit=limit,
+                exc_info=True,
+            )
+            raise
 
     async def cleanup_completed_events(self, days_old: int = 7) -> int:
         """Clean up completed events older than specified days."""

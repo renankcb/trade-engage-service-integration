@@ -1,6 +1,7 @@
 """Create job use case."""
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import List
 from uuid import UUID
 
@@ -128,8 +129,6 @@ class CreateJobUseCase:
                         f"Invalid skill level '{level}' for skill '{skill}'. Must be one of: {valid_levels}"
                     )
 
-        # 4. Find the BEST company using intelligent matching engine BEFORE creating job
-        # This ensures we don't create a job if no companies are available
         job_requirements = JobRequirements(
             job_id=UUID("00000000-0000-0000-0000-000000000000"),
             required_skills=request.required_skills or [],
@@ -199,11 +198,9 @@ class CreateJobUseCase:
                 sync_status="pending",
             )
 
-            # PERSISTIR IMEDIATAMENTE para garantir atomicidade
             persisted_routing = await self.job_routing_repo.create(routing)
 
             # 5.4. Create outbox event for immediate sync (atomic operation)
-            # Este evento será processado pelo worker para enfileirar Celery task
             await self.outbox.create_event(
                 event_type=OutboxEventType.JOB_SYNC,
                 aggregate_id=str(persisted_routing.id),
@@ -225,8 +222,6 @@ class CreateJobUseCase:
                 matched_skills=best_company_match.matched_skills,
             )
 
-            # 5.5. COMMIT EXPLÍCITO para garantir que todas as operações sejam persistidas
-            # Usando o TransactionService centralizado para melhor controle
             await self.transaction_service.commit()
 
             logger.info(
@@ -236,7 +231,6 @@ class CreateJobUseCase:
             )
 
         except Exception as e:
-            # Se qualquer operação falhar, a transação será revertida automaticamente
             logger.error(
                 "Failed to create job and routing - transaction will be rolled back",
                 error=str(e),

@@ -193,7 +193,6 @@ async def get_job_routings(
                 sync_status=routing.sync_status,
                 external_id=routing.external_id,
                 retry_count=routing.retry_count,
-                last_sync_attempt=routing.last_sync_attempt,
                 last_synced_at=routing.last_synced_at,
                 error_message=routing.error_message,
                 created_at=routing.created_at,

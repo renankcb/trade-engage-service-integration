@@ -1,7 +1,7 @@
 """Batch sync use case for processing multiple jobs efficiently."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 from uuid import UUID
 
@@ -53,7 +53,7 @@ class BatchSyncUseCase:
 
     async def execute(self, limit: int = None) -> BatchSyncResult:
         """Execute batch sync of pending jobs."""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         batch_size = limit or settings.BATCH_SIZE
 
         logger.info("Starting batch sync", batch_size=batch_size)
@@ -105,7 +105,7 @@ class BatchSyncUseCase:
                 failed += len(routings)
 
         # Calculate metrics
-        processing_time = (datetime.utcnow() - start_time).total_seconds()
+        processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
         # Record metrics
         # MetricsCollector.record_background_task("batch_sync", successful > failed) # Removed MetricsCollector
@@ -153,7 +153,7 @@ class BatchSyncUseCase:
         self, provider_type: ProviderType, routings: List[JobRouting]
     ) -> BatchSyncResult:
         """Process batch for specific provider."""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         logger.info(
             "Processing provider batch",
@@ -236,7 +236,7 @@ class BatchSyncUseCase:
             errors.append(error_msg)
             failed += len(routings)
 
-        processing_time = (datetime.utcnow() - start_time).total_seconds()
+        processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
         return BatchSyncResult(
             total_processed=len(routings),

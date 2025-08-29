@@ -96,7 +96,6 @@ class JobRoutingResponse(TimestampMixin):
     external_id: Optional[str]
     sync_status: SyncStatus
     retry_count: int
-    last_sync_attempt: Optional[datetime]
     last_synced_at: Optional[datetime]
     error_message: Optional[str]
 

@@ -2,7 +2,7 @@
 Job Skill Requirement SQLAlchemy model.
 """
 
-from sqlalchemy import Column, Boolean, String, ForeignKey
+from sqlalchemy import Boolean, Column, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -18,7 +18,9 @@ class JobSkillRequirementModel(BaseModel):
         UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False, index=True
     )
     skill_name = Column(String(100), nullable=False, index=True)
-    required_level = Column(String(20), nullable=False, default="intermediate", index=True)  # basic, intermediate, expert
+    required_level = Column(
+        String(20), nullable=False, default="intermediate", index=True
+    )  # basic, intermediate, expert
     is_required = Column(Boolean, nullable=False, default=True)
 
     # Relationships

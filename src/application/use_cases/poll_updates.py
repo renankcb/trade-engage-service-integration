@@ -1,7 +1,7 @@
 """Poll updates use case for checking job completion status."""
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from src.application.interfaces.repositories import (
@@ -10,6 +10,7 @@ from src.application.interfaces.repositories import (
     JobRoutingRepositoryInterface,
 )
 from src.application.services.provider_manager import ProviderManager
+from src.application.services.transaction_service import TransactionService
 from src.config.logging import get_logger
 from src.config.settings import settings
 from src.domain.entities.job_routing import JobRouting
@@ -39,15 +40,17 @@ class PollUpdatesUseCase:
         company_repo: CompanyRepositoryInterface,
         job_repo: JobRepositoryInterface,
         provider_manager: ProviderManager,
+        transaction_service: TransactionService,
     ):
         self.job_routing_repo = job_routing_repo
         self.company_repo = company_repo
         self.job_repo = job_repo
         self.provider_manager = provider_manager
+        self.transaction_service = transaction_service
 
     async def execute(self, limit: int = None) -> PollResult:
         """Execute polling for synced job statuses."""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         poll_limit = limit or settings.POLLING_BATCH_SIZE
 
         logger.info("Starting job status polling", limit=poll_limit)
@@ -92,10 +95,7 @@ class PollUpdatesUseCase:
                 )
                 errors.append(error_msg)
 
-        processing_time = (datetime.utcnow() - start_time).total_seconds()
-
-        # Record metrics
-        # MetricsCollector.record_background_task("poll_updates", len(errors) == 0) # Removed as per edit hint
+        processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
         result = PollResult(
             total_polled=total_polled,
@@ -140,7 +140,7 @@ class PollUpdatesUseCase:
         self, provider_type: ProviderType, company_id: str, routings: List[JobRouting]
     ) -> PollResult:
         """Poll status for a group of jobs from same provider/company."""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         logger.info(
             "Polling provider group",
@@ -155,13 +155,16 @@ class PollUpdatesUseCase:
 
         try:
             # Get provider and company config
-            provider = self.provider_manager.get_provider(provider_type)
             company = await self.company_repo.get_by_id(company_id)
 
             if not company:
                 error_msg = f"Company {company_id} not found"
                 errors.append(error_msg)
                 return PollResult(len(routings), 0, 0, [error_msg], 0.0)
+
+            provider = self.provider_manager.get_provider(
+                provider_type, company=company
+            )
 
             # Extract external IDs for batch polling
             external_ids = [r.external_id for r in routings if r.external_id]
@@ -221,10 +224,12 @@ class PollUpdatesUseCase:
                         )
                     else:
                         # Update last polled time even if not completed
-                        routing.last_synced_at = datetime.utcnow()
+                        routing.last_synced_at = datetime.now(timezone.utc)
                         updated += 1
 
                     await self.job_routing_repo.update(routing)
+
+                    await self.transaction_service.commit()
 
                 except Exception as e:
                     error_msg = f"Failed to update routing {routing.id}: {str(e)}"
@@ -235,6 +240,16 @@ class PollUpdatesUseCase:
                         error=str(e),
                     )
 
+            # Commit all changes atomically
+            if updated > 0 or completed > 0:
+                logger.info(
+                    "Transaction committed successfully",
+                    provider=provider_type.value,
+                    company_id=str(company_id),
+                    updated=updated,
+                    completed=completed,
+                )
+
         except Exception as e:
             error_msg = f"Provider polling failed: {str(e)}"
             errors.append(error_msg)
@@ -244,7 +259,7 @@ class PollUpdatesUseCase:
                 error=str(e),
             )
 
-        processing_time = (datetime.utcnow() - start_time).total_seconds()
+        processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
         return PollResult(
             total_polled=len(routings),
@@ -261,7 +276,7 @@ class PollUpdatesUseCase:
 
         # Don't poll too frequently
         if routing.last_synced_at:
-            time_since_last_poll = datetime.utcnow() - routing.last_synced_at
+            time_since_last_poll = datetime.now(timezone.utc) - routing.last_synced_at
             min_interval = timedelta(minutes=settings.SYNC_INTERVAL_MINUTES)
 
             if time_since_last_poll < min_interval:

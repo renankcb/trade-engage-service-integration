@@ -22,26 +22,23 @@ class JobRoutingModel(BaseModel):
     company_id_received = Column(
         UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True
     )
-    external_id = Column(String(255), unique=True, index=True)  # ID in external system
+    external_id = Column(String(255), unique=True, index=True)
     sync_status = Column(
-        ENUM(
-            SyncStatus,
-            name="sync_status_enum",
-            values_callable=lambda obj: [e.value for e in obj],
-        ),
-        default=SyncStatus.PENDING,
+        String(50),
+        default=SyncStatus.PENDING.value,
         nullable=False,
         index=True,
     )
     retry_count = Column(Integer, default=0, nullable=False)
-    last_sync_attempt = Column(DateTime(timezone=True))
     last_synced_at = Column(DateTime(timezone=True), index=True)
     error_message = Column(Text)
 
     # Additional fields for tracking
     next_retry_at = Column(DateTime(timezone=True), index=True)
     total_sync_attempts = Column(Integer, default=0, nullable=False)
-    claimed_at = Column(DateTime(timezone=True), index=True)  # When routing was claimed for processing
+    claimed_at = Column(
+        DateTime(timezone=True), index=True
+    )  # When routing was claimed for processing
 
     # Relationships
     job = relationship("JobModel", back_populates="job_routings")

@@ -4,14 +4,14 @@ Sync failed domain event.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 
 @dataclass
 class SyncFailed:
     """Event raised when a sync operation fails."""
-    
+
     sync_id: UUID
     provider_type: str
     failed_at: datetime

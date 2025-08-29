@@ -12,6 +12,7 @@ from src.application.interfaces.repositories import (
 )
 from src.application.services.data_transformer import DataTransformer
 from src.application.services.provider_manager import ProviderManager
+from src.application.services.transaction_service import TransactionService
 from src.config.logging import get_logger
 from src.domain.entities.job_routing import JobRouting
 from src.domain.exceptions.sync_error import SyncError, SyncStatusError
@@ -29,12 +30,14 @@ class SyncJobUseCase:
         company_repo: CompanyRepositoryInterface,
         provider_manager: ProviderManager,
         data_transformer: DataTransformer,
+        transaction_service: TransactionService,
     ):
         self.job_routing_repo = job_routing_repo
         self.job_repo = job_repo
         self.company_repo = company_repo
         self.provider_manager = provider_manager
         self.data_transformer = data_transformer
+        self.transaction_service = transaction_service
 
     async def execute(self, job_routing_id: UUID) -> bool:
         """Execute job sync to external provider."""
@@ -60,10 +63,6 @@ class SyncJobUseCase:
             if not company:
                 raise SyncError(f"Company {job_routing.company_id_received} not found")
 
-            # 4. Mark sync started
-            job_routing.mark_sync_started()
-            await self.job_routing_repo.update(job_routing)
-
             logger.info(
                 "Job sync started",
                 job_routing_id=str(job_routing_id),
@@ -72,19 +71,21 @@ class SyncJobUseCase:
                 provider=company.provider_type.value,
             )
 
-            # 5. Get provider and create lead
-            provider = self.provider_manager.get_provider(company.provider_type)
+            # 4. Get provider and create lead
+            provider = self.provider_manager.get_provider(
+                company.provider_type, company=company
+            )
 
             # Create request with idempotency key to prevent duplicates
             request = CreateLeadRequest(
-                job=job, 
+                job=job,
                 company_config=company.provider_config,
-                idempotency_key=str(job_routing.id)  # Use routing ID as idempotency key
+                idempotency_key=str(job_routing.id),
             )
 
             response = await provider.create_lead(request)
 
-            # 6. Handle response
+            # 5. Handle response
             if response.success and response.external_id:
                 job_routing.mark_sync_success(response.external_id)
                 await self.job_routing_repo.update(job_routing)
@@ -95,6 +96,9 @@ class SyncJobUseCase:
                     external_id=response.external_id,
                     provider=company.provider_type.value,
                 )
+
+                await self.transaction_service.commit()
+
                 return True
             else:
                 error_msg = response.error_message or "Unknown provider error"
@@ -107,10 +111,11 @@ class SyncJobUseCase:
                     error=error_msg,
                     provider=company.provider_type.value,
                 )
-                return False
 
+                await self.transaction_service.commit()
+
+                return False
         except Exception as e:
-            # Handle unexpected errors
             error_msg = f"Sync failed with exception: {str(e)}"
 
             try:
@@ -118,6 +123,7 @@ class SyncJobUseCase:
                 if job_routing:
                     job_routing.mark_sync_failed(error_msg)
                     await self.job_routing_repo.update(job_routing)
+                    await self.transaction_service.commit()
             except Exception as update_error:
                 logger.error(
                     "Failed to update job routing after error", error=str(update_error)

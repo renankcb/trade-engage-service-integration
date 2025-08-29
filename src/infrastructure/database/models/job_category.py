@@ -2,7 +2,7 @@
 Job Category SQLAlchemy model.
 """
 
-from sqlalchemy import Column, Boolean, String, Text, ForeignKey
+from sqlalchemy import Boolean, Column, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -22,7 +22,9 @@ class JobCategoryModel(BaseModel):
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
     # Relationships
-    parent_category = relationship("JobCategoryModel", remote_side="JobCategoryModel.id")
+    parent_category = relationship(
+        "JobCategoryModel", remote_side="JobCategoryModel.id"
+    )
     sub_categories = relationship("JobCategoryModel", back_populates="parent_category")
 
     def __repr__(self) -> str:

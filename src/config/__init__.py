@@ -8,7 +8,6 @@ from .settings import settings
 
 __all__ = [
     "settings",
-    
     # Database
     "get_database_url",
     "get_async_database_url",
@@ -18,7 +17,6 @@ __all__ = [
     "get_database_health",
     "test_database_connection",
     "close_database_connections",
-    
     # Logging
     "setup_logging",
     "get_logger",

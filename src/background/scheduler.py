@@ -5,10 +5,6 @@ Celery Beat scheduler configuration.
 from celery.schedules import crontab
 
 from src.background.celery_app import celery_app
-from src.background.tasks.cleanup_jobs import (
-    cleanup_completed_jobs_task,
-    cleanup_failed_jobs_task,
-)
 from src.background.tasks.sync_jobs import (
     poll_synced_jobs_task,
     retry_failed_jobs_task,
@@ -42,25 +38,10 @@ def setup_periodic_tasks(sender, **kwargs):
         name="retry-failed-jobs-every-15-minutes",
     )
 
-    # Cleanup old completed jobs daily at 2 AM
-    sender.add_periodic_task(
-        crontab(hour=2, minute=0),
-        cleanup_completed_jobs_task.s(),
-        name="cleanup-old-completed-jobs-daily",
-    )
-
-    # Cleanup old failed jobs daily at 3 AM
-    sender.add_periodic_task(
-        crontab(hour=3, minute=0),
-        cleanup_failed_jobs_task.s(),
-        name="cleanup-old-failed-jobs-daily",
-    )
-
 
 # Task routing configuration (moved from celery_app.py)
 celery_app.conf.task_routes = {
     "src.background.tasks.sync_jobs.*": {"queue": "sync"},
-    "src.background.tasks.cleanup_jobs.*": {"queue": "maintenance"},
 }
 
 # Task rate limiting (moved from celery_app.py)

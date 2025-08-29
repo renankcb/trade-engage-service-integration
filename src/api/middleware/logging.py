@@ -15,11 +15,11 @@ logger = get_logger(__name__)
 
 class LoggingMiddleware:
     """Request/Response logging middleware for FastAPI."""
-    
+
     def __init__(self, app: FastAPI):
         self.app = app
         self.add_logging_middleware()
-    
+
     def add_logging_middleware(self) -> None:
         """Add request/response logging middleware."""
 

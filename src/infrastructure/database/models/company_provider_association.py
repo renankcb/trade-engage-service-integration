@@ -2,7 +2,7 @@
 Company Provider Association SQLAlchemy model.
 """
 
-from sqlalchemy import Column, Boolean, String, JSON, ForeignKey
+from sqlalchemy import JSON, Boolean, Column, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 

@@ -1,7 +1,7 @@
 """Job domain entity."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID, uuid4
@@ -18,15 +18,15 @@ class Job:
     homeowner_name: str
     homeowner_phone: Optional[str]
     homeowner_email: Optional[str]
-    created_by_company_id: UUID 
-    created_by_technician_id: UUID 
+    created_by_company_id: UUID
+    created_by_technician_id: UUID
     id: UUID = field(default_factory=uuid4)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     revenue: Optional[Decimal] = None
     completed_at: Optional[datetime] = None
     status: str = "pending"
-    
+
     # Job skills and classification
     required_skills: Optional[list[str]] = None
     skill_levels: Optional[dict[str, str]] = None  # skill_name -> required_level
@@ -43,9 +43,9 @@ class Job:
 
         # Set timestamps if not provided
         if not self.created_at:
-            self.created_at = datetime.utcnow()
+            self.created_at = datetime.now(timezone.utc)
         if not self.updated_at:
-            self.updated_at = datetime.utcnow()
+            self.updated_at = datetime.now(timezone.utc)
 
     @property
     def location_string(self) -> str:
@@ -72,8 +72,8 @@ class Job:
 
         self.status = "completed"
         self.revenue = revenue
-        self.completed_at = completed_at or datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.completed_at = completed_at or datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
 
     def to_provider_format(self) -> dict:
         """Convert job to generic provider format."""

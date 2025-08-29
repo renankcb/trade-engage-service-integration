@@ -15,7 +15,7 @@ celery_app = Celery(
     "service_integration",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["src.background.tasks.sync_jobs", "src.background.tasks.cleanup_jobs"],
+    include=["src.background.tasks.sync_jobs"],
 )
 
 # Celery configuration
@@ -27,8 +27,6 @@ celery_app.conf.update(
         "poll_synced_jobs_task": {"queue": "poll"},
         "retry_failed_jobs_task": {"queue": "retry"},
         "retry_failed_job_task": {"queue": "retry"},
-        "cleanup_completed_jobs_task": {"queue": "maintenance"},
-        "cleanup_failed_jobs_task": {"queue": "maintenance"},
     },
     # Worker configuration
     worker_prefetch_multiplier=1,
@@ -61,7 +59,7 @@ celery_app.conf.update(
         # Poll for updates every 5 minutes
         "poll-job-updates": {
             "task": "poll_synced_jobs_task",
-            "schedule": 300.0,  # 5 minutes
+            "schedule": 60.0,  # 1 minute
             "options": {"queue": "poll"},
         },
         # Retry failed jobs every 10 minutes
@@ -69,18 +67,6 @@ celery_app.conf.update(
             "task": "retry_failed_jobs_task",
             "schedule": 600.0,  # 10 minutes
             "options": {"queue": "retry"},
-        },
-        # Cleanup completed jobs every hour
-        "cleanup-completed-jobs": {
-            "task": "cleanup_completed_jobs_task",
-            "schedule": crontab(minute=0, hour="*"),  # Every hour
-            "options": {"queue": "maintenance"},
-        },
-        # Cleanup failed jobs every 6 hours
-        "cleanup-failed-jobs": {
-            "task": "cleanup_failed_jobs_task",
-            "schedule": crontab(minute=0, hour="*/6"),  # Every 6 hours
-            "options": {"queue": "maintenance"},
         },
         # Cleanup outbox events every 12 hours
         "cleanup-outbox-events": {
