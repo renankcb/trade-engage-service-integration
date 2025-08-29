@@ -7,12 +7,12 @@ from typing import List
 
 import structlog
 
-from src.application.services.transactional_outbox import (
+from src.config.logging import get_logger
+from src.infrastructure.database.repositories.transactional_outbox_repository import (
     OutboxEvent,
     OutboxEventType,
     TransactionalOutbox,
 )
-from src.config.logging import get_logger
 
 logger = get_logger(__name__)
 

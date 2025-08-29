@@ -12,11 +12,13 @@ from src.application.interfaces.repositories import (
 )
 from src.application.services.data_transformer import DataTransformer
 from src.application.services.provider_manager import ProviderManager
-from src.application.services.transaction_service import TransactionService
 from src.config.logging import get_logger
 from src.domain.entities.job_routing import JobRouting
 from src.domain.exceptions.sync_error import SyncError, SyncStatusError
 from src.domain.value_objects.sync_status import SyncStatus
+from src.infrastructure.database.repositories.transaction_repository import (
+    TransactionService,
+)
 
 logger = get_logger(__name__)
 

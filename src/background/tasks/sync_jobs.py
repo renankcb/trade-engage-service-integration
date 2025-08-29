@@ -100,7 +100,6 @@ def sync_job_task(self, routing_id: str):
         # Import here to avoid circular imports
         from src.application.services.data_transformer import DataTransformer
         from src.application.services.provider_manager import ProviderManager
-        from src.application.services.transaction_service import TransactionService
         from src.application.use_cases.sync_job import SyncJobUseCase
         from src.config.database import get_async_session_factory
         from src.infrastructure.database.repositories.company_repository import (
@@ -111,6 +110,9 @@ def sync_job_task(self, routing_id: str):
         )
         from src.infrastructure.database.repositories.job_routing_repository import (
             JobRoutingRepository,
+        )
+        from src.infrastructure.database.repositories.transaction_repository import (
+            TransactionService,
         )
         from src.infrastructure.providers.factory import ProviderFactory
 
@@ -238,13 +240,15 @@ def sync_pending_jobs_task(self):
 
         # Import here to avoid circular imports
         from src.application.services.provider_manager import ProviderManager
-        from src.application.services.transaction_service import TransactionService
         from src.config.database import get_async_session_factory
         from src.infrastructure.database.repositories.company_repository import (
             CompanyRepository,
         )
         from src.infrastructure.database.repositories.job_routing_repository import (
             JobRoutingRepository,
+        )
+        from src.infrastructure.database.repositories.transaction_repository import (
+            TransactionService,
         )
         from src.infrastructure.providers.factory import ProviderFactory
 
@@ -408,7 +412,6 @@ def poll_synced_jobs_task(self):
 
         # Import here to avoid circular imports
         from src.application.services.provider_manager import ProviderManager
-        from src.application.services.transaction_service import TransactionService
         from src.application.use_cases.poll_updates import PollUpdatesUseCase
         from src.config.database import get_async_session_factory
         from src.infrastructure.database.repositories.company_repository import (
@@ -419,6 +422,9 @@ def poll_synced_jobs_task(self):
         )
         from src.infrastructure.database.repositories.job_routing_repository import (
             JobRoutingRepository,
+        )
+        from src.infrastructure.database.repositories.transaction_repository import (
+            TransactionService,
         )
         from src.infrastructure.providers.factory import ProviderFactory
 
@@ -495,10 +501,12 @@ def retry_failed_jobs_task(self):
         logger.info("Starting failed jobs retry task", attempt=self.request.retries + 1)
 
         # Import here to avoid circular imports
-        from src.application.services.transaction_service import TransactionService
         from src.config.database import get_async_session_factory
         from src.infrastructure.database.repositories.job_routing_repository import (
             JobRoutingRepository,
+        )
+        from src.infrastructure.database.repositories.transaction_repository import (
+            TransactionService,
         )
 
         async def execute_retry_with_transaction():
@@ -603,10 +611,12 @@ def retry_failed_job_task(self, routing_id: str):
         )
 
         # Import here to avoid circular imports
-        from src.application.services.transaction_service import TransactionService
         from src.config.database import get_async_session_factory
         from src.infrastructure.database.repositories.job_routing_repository import (
             JobRoutingRepository,
+        )
+        from src.infrastructure.database.repositories.transaction_repository import (
+            TransactionService,
         )
 
         async def execute_individual_retry_with_transaction():

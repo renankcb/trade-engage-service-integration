@@ -9,7 +9,6 @@ from uuid import uuid4
 import pytest
 
 from src.application.interfaces.providers import CreateLeadRequest, CreateLeadResponse
-from src.application.services.transaction_service import TransactionService
 from src.application.use_cases.sync_job import SyncJobUseCase
 from src.domain.entities.job import Job
 from src.domain.entities.job_routing import JobRouting
@@ -17,6 +16,9 @@ from src.domain.exceptions.sync_error import SyncError, SyncStatusError
 from src.domain.value_objects.address import Address
 from src.domain.value_objects.provider_type import ProviderType
 from src.domain.value_objects.sync_status import SyncStatus
+from src.infrastructure.database.repositories.transaction_repository import (
+    TransactionService,
+)
 
 
 class TestSyncJobUseCase:

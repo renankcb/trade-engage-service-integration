@@ -15,17 +15,19 @@ from src.application.services.job_matching_engine import (
     JobMatchingEngine,
     JobRequirements,
 )
-from src.application.services.transaction_service import TransactionService
-from src.application.services.transactional_outbox import (
-    OutboxEventType,
-    TransactionalOutbox,
-)
 from src.config.logging import get_logger
 from src.domain.entities.job import Job
 from src.domain.entities.job_routing import JobRouting
 from src.domain.exceptions.validation_error import ValidationError
 from src.domain.value_objects.address import Address
 from src.domain.value_objects.homeowner import Homeowner
+from src.infrastructure.database.repositories.transaction_repository import (
+    TransactionService,
+)
+from src.infrastructure.database.repositories.transactional_outbox_repository import (
+    OutboxEventType,
+    TransactionalOutbox,
+)
 
 logger = get_logger(__name__)
 

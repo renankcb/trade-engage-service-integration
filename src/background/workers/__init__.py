@@ -29,13 +29,13 @@ class WorkerManager:
     def _get_outbox_worker(self):
         """Lazy initialization of outbox worker."""
         if self.outbox_worker is None:
-            from src.application.services.transactional_outbox import (
-                TransactionalOutbox,
-            )
             from src.background.workers.outbox_worker import OutboxWorker
 
             # Create a new session for the outbox worker
             from src.config.database import async_session_factory
+            from src.infrastructure.database.repositories.transactional_outbox_repository import (
+                TransactionalOutbox,
+            )
 
             outbox_service = TransactionalOutbox(async_session_factory())
             self.outbox_worker = OutboxWorker(outbox_service)

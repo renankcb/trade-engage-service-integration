@@ -9,7 +9,7 @@ from uuid import uuid4
 import pytest
 
 from src.application.services.job_matching_engine import CompanyMatch, JobRequirements
-from src.application.services.transactional_outbox import OutboxEventType
+from src.infrastructure.database.repositories.transactional_outbox_repository import OutboxEventType
 from src.application.use_cases.create_job import (
     CreateJobRequest,
     CreateJobResult,

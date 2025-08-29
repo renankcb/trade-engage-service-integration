@@ -11,7 +11,6 @@ import structlog
 from src.application.services.provider_manager import ProviderManager
 from src.application.services.rate_limiter import RateLimiter
 from src.application.services.retry_handler import RetryHandler
-from src.application.services.transaction_service import TransactionService
 from src.application.use_cases.poll_updates import PollUpdatesUseCase
 from src.config.logging import get_logger
 from src.infrastructure.database.repositories.company_repository import (
@@ -20,6 +19,9 @@ from src.infrastructure.database.repositories.company_repository import (
 from src.infrastructure.database.repositories.job_repository import JobRepository
 from src.infrastructure.database.repositories.job_routing_repository import (
     JobRoutingRepository,
+)
+from src.infrastructure.database.repositories.transaction_repository import (
+    TransactionService,
 )
 from src.infrastructure.providers.factory import ProviderFactory
 

@@ -9,13 +9,15 @@ from uuid import uuid4
 import pytest
 
 from src.application.interfaces.providers import JobStatusResponse
-from src.application.services.transaction_service import TransactionService
 from src.application.use_cases.poll_updates import PollResult, PollUpdatesUseCase
 from src.domain.entities.job import Job
 from src.domain.entities.job_routing import JobRouting
 from src.domain.value_objects.address import Address
 from src.domain.value_objects.provider_type import ProviderType
 from src.domain.value_objects.sync_status import SyncStatus
+from src.infrastructure.database.repositories.transaction_repository import (
+    TransactionService,
+)
 
 
 class TestPollUpdatesUseCase:

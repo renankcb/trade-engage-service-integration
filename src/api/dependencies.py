@@ -12,8 +12,6 @@ from src.application.services.job_matching_engine import JobMatchingEngine
 from src.application.services.provider_manager import ProviderManager
 from src.application.services.rate_limiter import RateLimiter
 from src.application.services.retry_handler import RetryHandler
-from src.application.services.transaction_service import TransactionService
-from src.application.services.transactional_outbox import TransactionalOutbox
 from src.config.database import get_db_session
 from src.config.logging import get_logger
 from src.infrastructure.database.repositories.company_repository import (
@@ -25,6 +23,12 @@ from src.infrastructure.database.repositories.job_routing_repository import (
 )
 from src.infrastructure.database.repositories.technician_repository import (
     TechnicianRepository,
+)
+from src.infrastructure.database.repositories.transaction_repository import (
+    TransactionService,
+)
+from src.infrastructure.database.repositories.transactional_outbox_repository import (
+    TransactionalOutbox,
 )
 from src.infrastructure.providers.factory import ProviderFactory
 
