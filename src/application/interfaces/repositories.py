@@ -27,8 +27,8 @@ class JobRoutingRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def get_by_job_id(self, job_id: UUID) -> List[JobRouting]:
-        """Get all job routings for a specific job."""
+    async def get_by_job_id(self, job_id: UUID) -> Optional[JobRouting]:
+        """Get the job routing for a specific job."""
         pass
 
     @abstractmethod

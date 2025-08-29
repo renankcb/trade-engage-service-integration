@@ -97,6 +97,7 @@ class JobRoutingResponse(TimestampMixin):
     retry_count: int
     last_synced_at: Optional[datetime]
     error_message: Optional[str]
+    revenue: Optional[float] = Field(None, description="Revenue for the job")
 
     model_config = {"from_attributes": True}
 

@@ -56,13 +56,13 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
 
         return self._model_to_entity(model) if model else None
 
-    async def get_by_job_id(self, job_id: UUID) -> List[JobRouting]:
-        """Get all job routings for a specific job."""
+    async def get_by_job_id(self, job_id: UUID) -> Optional[JobRouting]:
+        """Get the job routing for a specific job."""
         stmt = select(JobRoutingModel).where(JobRoutingModel.job_id == job_id)
         result = await self.db.execute(stmt)
-        models = result.scalars().all()
+        model = result.scalar_one_or_none()
 
-        return [self._model_to_entity(model) for model in models]
+        return self._model_to_entity(model) if model else None
 
     async def find_by_status(
         self, status: SyncStatus, limit: int = 100

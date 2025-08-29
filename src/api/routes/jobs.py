@@ -2,8 +2,6 @@
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import (
     CompanyRepositoryDep,
@@ -24,7 +22,6 @@ from src.api.schemas.job import (
 )
 from src.application.use_cases.create_job import CreateJobRequest, CreateJobUseCase
 from src.application.use_cases.sync_job import SyncJobUseCase
-from src.config.database import get_db_session
 from src.domain.exceptions.sync_error import SyncError
 from src.domain.exceptions.validation_error import ValidationError
 from src.domain.value_objects.homeowner import Homeowner
@@ -119,7 +116,6 @@ async def sync_job(
     job_repository: JobRepositoryDep,
     company_repository: CompanyRepositoryDep,
     provider_manager: ProviderManagerDep,
-    db_session: AsyncSession = Depends(get_db_session),
 ):
     """Sync a specific job to a specific company."""
     try:
@@ -174,48 +170,50 @@ async def sync_job(
         )
 
 
-@router.get("/{job_id}/routings", response_model=list[JobRoutingResponse])
-async def get_job_routings(
+@router.get("/{job_id}/routing", response_model=JobRoutingResponse)
+async def get_job_routing(
     job_id: str,
-    job_repository: JobRepositoryDep,
-    db_session: AsyncSession = Depends(get_db_session),
+    job_routing_repository: JobRoutingRepositoryDep,
 ):
-    """Get all routings for a specific job."""
+    """Get the routing for a specific job."""
     try:
-        routings = await job_repository.get_routings_by_job_id(job_id)
+        routing = await job_routing_repository.get_by_job_id(job_id)
 
-        return [
-            JobRoutingResponse(
-                id=str(routing.id),
-                job_id=str(routing.job_id),
-                company_id_received=str(routing.company_id_received),
-                sync_status=routing.sync_status,
-                external_id=routing.external_id,
-                retry_count=routing.retry_count,
-                last_synced_at=routing.last_synced_at,
-                error_message=routing.error_message,
-                created_at=routing.created_at,
-                updated_at=routing.updated_at,
+        if not routing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Job routing not found",
             )
-            for routing in routings
-        ]
+
+        return JobRoutingResponse(
+            id=routing.id,
+            job_id=routing.job_id,
+            company_id_received=routing.company_id_received,
+            sync_status=routing.sync_status,
+            external_id=routing.external_id,
+            retry_count=routing.retry_count,
+            last_synced_at=routing.last_synced_at,
+            error_message=routing.error_message,
+            revenue=routing.revenue,
+            created_at=routing.created_at,
+            updated_at=routing.updated_at,
+        )
 
     except Exception as e:
         logger.error(
-            "Failed to get job routings",
+            "Failed to get job routing",
             job_id=job_id,
             error=str(e),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get job routings",
+            detail="Failed to get job routing",
         )
 
 
 @router.get("/", response_model=list[JobResponse])
 async def list_jobs(
     job_repository: JobRepositoryDep,
-    db_session: AsyncSession = Depends(get_db_session),
     skip: int = 0,
     limit: int = 100,
 ):
@@ -225,19 +223,25 @@ async def list_jobs(
 
         return [
             JobResponse(
-                id=job.id,
+                id=str(job.id),
                 summary=job.summary,
-                address=job.address,
-                homeowner=Homeowner(
+                address=AddressSchema(
+                    street=job.address.street,
+                    city=job.address.city,
+                    state=job.address.state,
+                    zip_code=job.address.zip_code,
+                ),
+                homeowner=HomeownerSchema(
                     name=job.homeowner_name,
                     phone=job.homeowner_phone,
                     email=job.homeowner_email,
                 ),
-                created_by_company_id=job.created_by_company_id,
-                created_by_technician_id=job.created_by_technician_id,
+                created_by_company_id=str(job.created_by_company_id),
+                created_by_technician_id=str(job.created_by_technician_id),
+                status=job.status,
+                completed_at=job.completed_at,
                 created_at=job.created_at,
                 updated_at=job.updated_at,
-                routings=[],  # Don't include routings in list view
             )
             for job in jobs
         ]
