@@ -228,23 +228,20 @@ class PollUpdatesUseCase:
                         and routing.sync_status == SyncStatus.SYNCED
                     ):
                         # Update job routing
-                        routing.mark_completed()
+                        routing.mark_completed(status_resp.revenue)
                         completed += 1
                         updated += 1
 
                         # Update job entity with completion data
                         job = await self.job_repo.get_by_id(routing.job_id)
-                        if job and status_resp.revenue:
-                            job.mark_completed(
-                                status_resp.revenue, status_resp.completed_at
-                            )
+                        if job:
+                            job.mark_completed(status_resp.completed_at)
                             await self.job_repo.update(job)
 
                         logger.info(
                             "Job marked as completed",
                             routing_id=str(routing.id),
                             external_id=routing.external_id,
-                            revenue=status_resp.revenue,
                         )
                     else:
                         # Update last polled time even if not completed
@@ -264,15 +261,13 @@ class PollUpdatesUseCase:
                         error=str(e),
                     )
 
-            # Commit all changes atomically
-            if updated > 0 or completed > 0:
-                logger.info(
-                    "Transaction committed successfully",
-                    provider=provider_type.value,
-                    company_id=str(company_id),
-                    updated=updated,
-                    completed=completed,
-                )
+            logger.info(
+                "Transaction committed successfully",
+                provider=provider_type.value,
+                company_id=str(company_id),
+                updated=updated,
+                completed=completed,
+            )
 
         except Exception as e:
             error_msg = f"Provider polling failed: {str(e)}"

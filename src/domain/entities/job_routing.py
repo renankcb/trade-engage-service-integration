@@ -31,6 +31,7 @@ class JobRouting:
     claimed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    revenue: Optional[float] = None
 
     def __post_init__(self):
         """Initialize timestamps."""
@@ -132,7 +133,7 @@ class JobRouting:
         else:
             self.next_retry_at = None
 
-    def mark_completed(self) -> None:
+    def mark_completed(self, revenue: Optional[float] = None) -> None:
         """Mark job as completed in external system."""
         if self.sync_status != SyncStatus.SYNCED:
             raise SyncStatusError(str(self.sync_status), "synced")
@@ -140,6 +141,7 @@ class JobRouting:
         self.sync_status = SyncStatus.COMPLETED
         self.last_synced_at = datetime.now(timezone.utc)
         self.updated_at = datetime.now(timezone.utc)
+        self.revenue = revenue
 
     def should_retry(self) -> bool:
         """Check if sync should be retried."""

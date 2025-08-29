@@ -2,7 +2,16 @@
 Job Routing SQLAlchemy model.
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import relationship
 
@@ -36,9 +45,10 @@ class JobRoutingModel(BaseModel):
     # Additional fields for tracking
     next_retry_at = Column(DateTime(timezone=True), index=True)
     total_sync_attempts = Column(Integer, default=0, nullable=False)
-    claimed_at = Column(
-        DateTime(timezone=True), index=True
-    )  # When routing was claimed for processing
+    claimed_at = Column(DateTime(timezone=True), index=True)
+
+    # Revenue field
+    revenue = Column(Numeric(precision=10, scale=2), nullable=True, index=True)
 
     # Relationships
     job = relationship("JobModel", back_populates="job_routings")
@@ -54,6 +64,7 @@ class JobRoutingModel(BaseModel):
         Index("idx_job_routing_last_synced", "last_synced_at", "sync_status"),
         Index("idx_job_routing_retry", "sync_status", "retry_count", "next_retry_at"),
         Index("idx_job_routing_claimed", "claimed_at", "sync_status"),
+        Index("idx_job_routing_revenue", "revenue"),  # New index for revenue
         # UNIQUE constraint to prevent duplicate routings for the same job+company
         Index("idx_job_routing_unique", "job_id", "company_id_received", unique=True),
     )

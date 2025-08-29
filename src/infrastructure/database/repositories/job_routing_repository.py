@@ -38,6 +38,7 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             retry_count=job_routing.retry_count,
             last_synced_at=job_routing.last_synced_at,
             error_message=job_routing.error_message,
+            revenue=job_routing.revenue,
         )
 
         self.db.add(model)
@@ -302,6 +303,7 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
                 last_synced_at=job_routing.last_synced_at,
                 next_retry_at=job_routing.next_retry_at,
                 error_message=job_routing.error_message,
+                revenue=job_routing.revenue,
                 updated_at=datetime.now(timezone.utc),
             )
         )
@@ -341,6 +343,7 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
             next_retry_at=model.next_retry_at,
             error_message=model.error_message,
             claimed_at=model.claimed_at,
+            revenue=model.revenue,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

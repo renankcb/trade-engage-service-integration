@@ -125,7 +125,7 @@ class ProviderManager:
                 company_id=str(company_id),
                 error=str(e),
             )
-            raise ProviderAPIError(f"Failed to create lead: {str(e)}")
+            raise ProviderAPIError("unknown", 0, f"Failed to create lead: {str(e)}")
 
     async def get_active_companies(
         self, provider_type: Optional[ProviderType] = None
@@ -188,8 +188,7 @@ class ProviderManager:
             return {
                 "status": "healthy" if health_status.is_healthy else "unhealthy",
                 "provider_type": provider.provider_type.value,
-                "last_check": health_status.last_check.isoformat(),
-                "error_count": health_status.error_count,
+                "last_check": health_status.last_check,
                 "response_time_ms": health_status.response_time_ms,
             }
 

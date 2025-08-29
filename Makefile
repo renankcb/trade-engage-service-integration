@@ -17,11 +17,46 @@ RED := \033[0;31m
 BLUE := \033[0;34m
 NC := \033[0m # No Color
 
-help: ## Show this help message
-	@echo "$(BLUE)ServiceTitan Integration Service - Available Commands:$(NC)"
+# Default target
+help:
+	@echo "TradeEngage Service Integration - Available Commands:"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
+	@echo "Development:"
+	@echo "  install     - Install dependencies with Poetry"
+	@echo "  test        - Run tests"
+	@echo "  run         - Run the application"
 	@echo ""
+	@echo "Redis Management:"
+	@echo "  redis-flush - Clear all Redis data (FLUSHALL)"
+	@echo "  redis-clear - Clear only Celery queues and results"
+	@echo "  redis-info  - Show Redis info and memory usage"
+	@echo "  redis-monitor - Monitor Redis commands in real-time"
+	@echo ""
+	@echo "Docker Management:"
+	@echo "  docker-up   - Start all services"
+	@echo "  docker-down - Stop all services"
+	@echo "  docker-restart - Restart all services"
+	@echo "  docker-restart-workers - Restart specific Celery workers"
+	@echo "  docker-logs - Show logs from all services"
+	@echo "  docker-logs-workers - Show logs from specific Celery workers"
+	@echo ""
+	@echo "Celery Management:"
+	@echo "  celery-status - Show Celery worker status"
+	@echo "  celery-purge - Purge all Celery queues"
+	@echo "  celery-monitor - Monitor Celery tasks in real-time"
+	@echo ""
+	@echo "Task Queue Management:"
+	@echo "  celery-clear-queues      - Clear all Celery queues"
+	@echo "  celery-clear-default-queue - Clear default queue (sync_job_task)"
+	@echo "  celery-clear-sync-queue    - Clear sync queue"
+	@echo "  celery-clear-all-queues    - Clear all specific queues"
+	@echo "  celery-list-queues         - List all queues and contents"
+	@echo "  celery-list-tasks          - List all registered tasks"
+	@echo "  celery-cancel-all          - Cancel all running tasks"
+	@echo "  celery-cancel-by-queue     - Cancel tasks in specific queue (QUEUE=name)"
+	@echo ""
+	@echo "Quick cleanup command:"
+	@echo "  clean       - Clean up Celery queues and Redis data"
 
 # Development Setup
 install: ## Install Python dependencies
@@ -298,3 +333,60 @@ stop: ## Stop all services and cleanup
 list: ## List all available commands
 	@echo "$(BLUE)Available commands:$(NC)"
 	@$(MAKE) help
+
+# Celery Management commands
+celery-status:
+	@echo "Celery Worker Status:"
+	docker-compose exec worker celery -A src.background.celery_app:celery_app inspect stats
+
+celery-purge:
+	@echo "Purging all Celery queues..."
+	docker-compose exec worker celery -A src.background.celery_app:celery_app purge -f
+
+celery-monitor:
+	@echo "Monitoring Celery tasks in real-time..."
+	docker-compose exec worker celery -A src.background.celery_app:celery_app events
+
+# Task Queue Management commands
+celery-clear-queues:
+	@echo "Clearing all Celery queues..."
+	docker-compose exec worker celery -A src.background.celery_app:celery_app purge -f
+	@echo "✅ All Celery queues cleared"
+
+celery-clear-default-queue:
+	@echo "Clearing default queue (sync_job_task)..."
+	docker-compose exec worker celery -A src.background.celery_app:celery_app purge -Q default -f
+	@echo "✅ Default queue cleared"
+
+celery-clear-sync-queue:
+	@echo "Clearing sync queue..."
+	docker-compose exec worker celery -A src.background.celery_app:celery_app purge -Q sync -f
+	@echo "✅ Sync queue cleared"
+
+celery-clear-all-queues:
+	@echo "Clearing all specific queues..."
+	docker-compose exec worker celery -A src.background.celery_app:celery_app purge -Q default,sync,maintenance,poll,retry -f
+	@echo "✅ All specific queues cleared"
+
+celery-list-queues:
+	@echo "Listing all Celery queues and their contents:"
+	docker-compose exec worker celery -A src.background.celery_app:celery_app inspect active_queues
+
+celery-list-tasks:
+	@echo "Listing all registered Celery tasks:"
+	docker-compose exec worker celery -A src.background.celery_app:celery_app inspect registered
+
+celery-cancel-all:
+	@echo "Cancelling all running Celery tasks..."
+	docker-compose exec worker celery -A src.background.celery_app:celery_app control revoke --all
+	@echo "✅ All running tasks cancelled"
+
+celery-cancel-by-queue:
+	@echo "Usage: make celery-cancel-by-queue QUEUE=default"
+	@echo "Cancelling all tasks in specific queue..."
+	@if [ -z "$(QUEUE)" ]; then \
+		echo "❌ Please specify QUEUE parameter (e.g., make celery-cancel-by-queue QUEUE=default)"; \
+		exit 1; \
+	fi
+	docker-compose exec worker celery -A src.background.celery_app:celery_app control revoke --queue=$(QUEUE) --all
+	@echo "✅ All tasks in $(QUEUE) queue cancelled"

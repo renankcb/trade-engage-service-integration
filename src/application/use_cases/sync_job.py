@@ -83,7 +83,6 @@ class SyncJobUseCase:
                 )
 
             # 3. Mark as processing to prevent other tasks from interfering
-            # Do this BEFORE double-checking to avoid race conditions
             try:
                 job_routing.mark_sync_started()
                 await self.job_routing_repo.update(job_routing)
@@ -102,7 +101,6 @@ class SyncJobUseCase:
                 return False
 
             # 4. Double-check status after marking as processing (prevent race condition)
-            # Reload the routing to ensure we have the latest status
             fresh_routing = await self.job_routing_repo.get_by_id(job_routing_id)
             if not fresh_routing:
                 logger.error(

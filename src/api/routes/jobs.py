@@ -94,7 +94,6 @@ async def create_job(
             created_by_company_id=str(result.job.created_by_company_id),
             created_by_technician_id=str(result.job.created_by_technician_id),
             status=result.job.status,
-            revenue=result.job.revenue,
             completed_at=result.job.completed_at,
             created_at=result.job.created_at,
             updated_at=result.job.updated_at,

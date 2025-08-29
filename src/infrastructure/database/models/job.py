@@ -34,7 +34,6 @@ class JobModel(BaseModel):
     homeowner_email = Column(String(255))
 
     # Job completion fields
-    revenue = Column(Numeric(10, 2))
     completed_at = Column(DateTime(timezone=True))
     status = Column(String(50), default="pending", index=True)
 

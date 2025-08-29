@@ -520,6 +520,7 @@ def retry_failed_jobs_task(self):
                     return {
                         "status": "success",
                         "message": "No failed routings to retry",
+                        "total_failed": 0,
                         "retried": 0,
                     }
 
@@ -650,6 +651,7 @@ def retry_failed_job_task(self, routing_id: str):
                     "retry_count": routing.retry_count,
                 }
             finally:
+                await transaction_service.commit()
                 if hasattr(session, "close"):
                     await session.close()
 

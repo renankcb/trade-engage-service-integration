@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -23,7 +22,6 @@ class Job:
     id: UUID = field(default_factory=uuid4)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    revenue: Optional[Decimal] = None
     completed_at: Optional[datetime] = None
     status: str = "pending"
 
@@ -63,15 +61,12 @@ class Job:
             and self.created_by_technician_id  # Deve ter técnico identificador
         )
 
-    def mark_completed(
-        self, revenue: Decimal, completed_at: Optional[datetime] = None
-    ) -> None:
+    def mark_completed(self, completed_at: Optional[datetime] = None) -> None:
         """Mark job as completed."""
         if self.status == "completed":
             raise ValueError("Job is already completed")
 
         self.status = "completed"
-        self.revenue = revenue
         self.completed_at = completed_at or datetime.now(timezone.utc)
         self.updated_at = datetime.now(timezone.utc)
 

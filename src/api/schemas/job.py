@@ -73,7 +73,6 @@ class JobResponse(TimestampMixin):
         ..., description="Technician that IDENTIFIED the need"
     )
     status: str = Field(..., description="Current job status")
-    revenue: Optional[float] = Field(None, description="Job revenue when completed")
     completed_at: Optional[datetime] = Field(
         None, description="Job completion timestamp"
     )
