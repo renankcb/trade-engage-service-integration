@@ -111,6 +111,7 @@ class PollUpdatesUseCase:
             updated=updated,
             completed=completed,
             errors=len(errors),
+            errors_list=errors[:10],
             duration=f"{processing_time:.2f}s",
         )
 
@@ -173,9 +174,32 @@ class PollUpdatesUseCase:
                 logger.warning("No external IDs found for polling", count=len(routings))
                 return PollResult(len(routings), 0, 0, [], 0.0)
 
+            logger.info(
+                "Starting batch polling",
+                provider=provider_type.value,
+                company_id=str(company_id),
+                external_ids=external_ids,
+                count=len(external_ids),
+            )
+
             # Batch poll provider API
             status_responses = await provider.batch_get_job_status(
                 external_ids, company.provider_config
+            )
+
+            logger.info(
+                "Batch polling completed",
+                provider=provider_type.value,
+                responses_count=len(status_responses),
+                responses=[
+                    {
+                        "external_id": resp.external_id,
+                        "status": resp.status,
+                        "is_completed": resp.is_completed,
+                        "error": resp.error_message,
+                    }
+                    for resp in status_responses
+                ],
             )
 
             # Create lookup map

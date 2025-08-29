@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
     CELERY_TASK_ACKS_LATE: bool = True
     CELERY_TASK_REJECT_ON_WORKER_LOST: bool = True
-    CELERY_TASK_TIME_LIMIT: int = 300
-    CELERY_TASK_SOFT_TIME_LIMIT: int = 240
+    CELERY_TASK_TIME_LIMIT: int = 600  # 10 minutes
+    CELERY_TASK_SOFT_TIME_LIMIT: int = 480  # 8 minutes
 
     # ServiceTitan API
     SERVICETITAN_BASE_URL: HttpUrl = "https://api.servicetitan.io"
@@ -95,6 +95,23 @@ class Settings(BaseSettings):
     # Database Migration
     RUN_MIGRATIONS: bool = True
     MIGRATION_TIMEOUT: int = 300
+
+    # Background Workers and Tasks Configuration
+    BACKGROUND_WORKER_OUTBOX_INTERVAL_SECONDS: int = 30
+    BACKGROUND_WORKER_POLL_INTERVAL_SECONDS: int = 60
+
+    # Celery Beat Scheduler Configuration
+    CELERY_SYNC_PENDING_JOBS_INTERVAL_SECONDS: int = 120  # 2 minutes
+    CELERY_POLL_JOB_UPDATES_INTERVAL_SECONDS: int = 20  # 20 seconds
+    CELERY_RETRY_FAILED_JOBS_INTERVAL_SECONDS: int = 600  # 10 minutes
+    CELERY_CLEANUP_OUTBOX_EVENTS_INTERVAL_HOURS: int = 12  # 12 hours
+    CELERY_CLEANUP_ORPHANED_ROUTINGS_HOUR: int = 2  # 2 AM
+
+    # Task Rate Limits
+    CELERY_SYNC_JOB_TASK_RATE_LIMIT: str = "100/m"
+    CELERY_SYNC_PENDING_JOBS_TASK_RATE_LIMIT: str = "30/m"
+    CELERY_POLL_SYNCED_JOBS_TASK_RATE_LIMIT: str = "12/m"
+    CELERY_RETRY_FAILED_JOBS_TASK_RATE_LIMIT: str = "6/m"
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

@@ -1,9 +1,36 @@
 """
 Celery tasks for job synchronization.
+
+ARCHITECTURE OVERVIEW:
+=====================
+
+1. IMMEDIATE EXECUTION (OutboxWorker):
+   - OutboxWorker runs every 30 seconds
+   - Processes JOB_SYNC events immediately
+   - Calls sync_job_task.delay() for instant processing
+   - PRIMARY PATH for job synchronization
+
+2. BACKUP EXECUTION (Celery Beat):
+   - sync_pending_jobs_task runs every 2 minutes
+   - Only processes jobs that are "stuck" (>5 minutes old)
+   - Safety net for jobs missed by OutboxWorker
+   - PREVENTS DUPLICATION with immediate execution
+
+3. INDIVIDUAL TASK EXECUTION:
+   - sync_job_task processes individual job routings
+   - Called by both OutboxWorker (immediate) and backup task
+   - Handles the actual sync operation with providers
+
+This architecture ensures:
+- ✅ No duplication of work
+- ✅ Immediate processing when possible
+- ✅ Backup safety net for edge cases
+- ✅ Clear separation of concerns
 """
 
 import asyncio
 import random
+import sys
 from uuid import UUID
 
 import structlog
@@ -12,7 +39,48 @@ from celery import current_app
 logger = structlog.get_logger()
 
 
-@current_app.task(bind=True, max_retries=3, name="sync_job_task")
+def run_async_in_new_loop(coro):
+    """
+    Run an async coroutine in a new event loop.
+
+    This function ensures that each Celery task gets its own event loop,
+    preventing event loop mixing issues between different processes.
+    """
+    try:
+        # Create a new event loop for this task
+        if sys.platform == "win32":
+            # Windows-specific event loop policy
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        else:
+            # Unix-like systems
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        # Run the coroutine
+        result = loop.run_until_complete(coro)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error in async execution: {e}")
+        raise
+    finally:
+        # Clean up the loop
+        try:
+            loop.close()
+        except Exception:
+            pass
+
+
+@current_app.task(
+    bind=True,
+    max_retries=3,
+    name="sync_job_task",
+    priority=1,  # Highest priority for immediate execution
+    queue="default",  # Explicitly specify default queue
+    acks_late=False,  # Acknowledge immediately
+    reject_on_worker_lost=False,  # Don't reject on worker restart
+)
 def sync_job_task(self, routing_id: str):
     """
     Sync a specific job routing to its target company.
@@ -78,18 +146,11 @@ def sync_job_task(self, routing_id: str):
 
                 return result
             finally:
-                await session.close()
+                if hasattr(session, "close"):
+                    await session.close()
 
         # Execute with transaction using a new event loop
-        import asyncio
-
-        try:
-            # Create a new event loop for this task
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(execute_sync_with_transaction())
-        finally:
-            loop.close()
+        result = run_async_in_new_loop(execute_sync_with_transaction())
 
         if result:
             logger.info(
@@ -158,10 +219,19 @@ def sync_job_task(self, routing_id: str):
 
 @current_app.task(bind=True, max_retries=2, name="sync_pending_jobs_task")
 def sync_pending_jobs_task(self):
-    """Find and sync all pending job routings."""
+    """
+    BACKUP TASK: Find and sync pending job routings that were missed by OutboxWorker.
+
+    This task runs every 2 minutes as a safety net to catch any jobs that:
+    1. Failed to be processed by OutboxWorker
+    2. Were created before OutboxWorker was running
+    3. Have been stuck in 'pending' status for too long
+
+    It should NOT duplicate the work of OutboxWorker.
+    """
     try:
         logger.info(
-            "Starting pending jobs sync task",
+            "Starting backup pending jobs sync task",
             attempt=self.request.retries + 1,
             max_retries=self.max_retries,
         )
@@ -179,7 +249,7 @@ def sync_pending_jobs_task(self):
         from src.infrastructure.providers.factory import ProviderFactory
 
         async def execute_pending_sync_with_transaction():
-            """Execute pending sync operation within a transaction."""
+            """Execute backup sync operation within a transaction."""
             # Create session factory and session
             session_factory = get_async_session_factory()
             session = session_factory()
@@ -192,77 +262,101 @@ def sync_pending_jobs_task(self):
                 provider_factory = ProviderFactory()
                 provider_manager = ProviderManager(provider_factory, company_repo)
 
-                # IMPLEMENTAR CLAIM PATTERN para evitar duplicatas
-                # Buscar e marcar routings como 'processing' atomicamente
-                claimed_routings = await job_routing_repo.claim_pending_routings(
-                    limit=50
+                stuck_routings = await job_routing_repo.find_stuck_pending_routings(
+                    limit=20,  # Smaller batch for backup
+                    older_than_minutes=5,  # Only process if stuck for 5+ minutes
                 )
 
-                if not claimed_routings:
-                    logger.info("No pending routings available for claiming")
+                if not stuck_routings:
+                    logger.info("No stuck pending routings found for backup processing")
                     return {
                         "status": "success",
-                        "message": "No pending routings available",
+                        "message": "No stuck routings found",
                         "processed": 0,
-                        "claimed_routings": [],
+                        "stuck_routings": [],
+                        "task_type": "backup",
                     }
 
-                # Queue individual sync tasks for each claimed routing
+                logger.info(
+                    "Found stuck routings for backup processing",
+                    count=len(stuck_routings),
+                    routing_ids=[str(r.id) for r in stuck_routings],
+                )
+
+                # Queue individual sync tasks for each stuck routing
                 queued_count = 0
-                for routing in claimed_routings:
+                queued_routing_ids = (
+                    set()
+                )  # Track queued routings to prevent duplicates
+
+                for routing in stuck_routings:
                     try:
+                        # Check if this routing is already queued
+                        if str(routing.id) in queued_routing_ids:
+                            logger.warning(
+                                "Routing already queued in this batch - skipping duplicate",
+                                routing_id=str(routing.id),
+                            )
+                            continue
+
+                        # Mark as being processed by backup task
+                        routing.mark_as_processing_by_backup()
+                        await job_routing_repo.update(routing)
+                        await transaction_service.commit()
+
+                        # Queue sync task
                         sync_job_task.delay(str(routing.id))
                         queued_count += 1
+                        queued_routing_ids.add(str(routing.id))
 
                         logger.info(
-                            "Queued sync task for claimed routing",
+                            "Backup sync task queued for stuck routing",
                             routing_id=str(routing.id),
                             company_id=str(routing.company_id_received),
-                            claim_timestamp=routing.claimed_at,
+                            stuck_duration_minutes=routing.get_stuck_duration_minutes(),
                         )
 
                     except Exception as e:
                         logger.error(
-                            "Failed to queue sync task for claimed routing",
+                            "Failed to queue backup sync task for stuck routing",
                             routing_id=str(routing.id),
                             error=str(e),
                         )
                         # Mark routing as failed since we couldn't queue it
                         await job_routing_repo.mark_sync_failed(
-                            routing.id, f"Failed to queue sync task: {str(e)}"
+                            routing.id, f"Backup task failed to queue: {str(e)}"
                         )
+
+                # Commit all changes
+                await transaction_service.commit()
 
                 return {
                     "status": "success",
-                    "total_claimed": len(claimed_routings),
+                    "total_stuck": len(stuck_routings),
                     "queued_tasks": queued_count,
-                    "claimed_routings": claimed_routings,
+                    "stuck_routings": stuck_routings,
+                    "task_type": "backup",
                 }
             finally:
-                await session.close()
+                if hasattr(session, "close"):
+                    await session.close()
 
         # Execute with transaction using a new event loop
-        import asyncio
-
-        try:
-            # Create a new event loop for this task
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(execute_pending_sync_with_transaction())
-        finally:
-            loop.close()
+        result = run_async_in_new_loop(execute_pending_sync_with_transaction())
 
         logger.info(
-            "Pending jobs sync task completed",
-            total_claimed=result["total_claimed"],
+            "Backup pending jobs sync task completed",
+            total_stuck=result["total_stuck"],
             queued_tasks=result["queued_tasks"],
+            task_type=result["task_type"],
             attempt=self.request.retries + 1,
         )
 
         return {
             "status": "success",
-            "total_claimed": result["total_claimed"],
+            "total_stuck": result["total_stuck"],
             "queued_tasks": result["queued_tasks"],
+            "task_type": result["task_type"],
         }
 
     except Exception as e:
@@ -331,7 +425,8 @@ def poll_synced_jobs_task(self):
         async def execute_poll_with_transaction():
             """Execute poll operation within a transaction."""
             # Create session and TransactionService
-            session = get_async_session_factory()
+            session_factory = get_async_session_factory()
+            session = session_factory()
             transaction_service = TransactionService(session)
 
             try:
@@ -348,15 +443,17 @@ def poll_synced_jobs_task(self):
                     company_repo=company_repo,
                     job_repo=job_repo,
                     provider_manager=provider_manager,
+                    transaction_service=transaction_service,  # Add missing parameter
                 )
 
                 result = await use_case.execute()
                 return result
             finally:
-                await session.close()
+                if hasattr(session, "close"):
+                    await session.close()
 
         # Execute with transaction
-        result = asyncio.run(execute_poll_with_transaction())
+        result = run_async_in_new_loop(execute_poll_with_transaction())
 
         logger.info(
             "Synced jobs polling task completed",
@@ -461,15 +558,7 @@ def retry_failed_jobs_task(self):
                 await transaction_service.commit()
 
         # Execute with transaction using a new event loop
-        import asyncio
-
-        try:
-            # Create a new event loop for this task
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(execute_retry_with_transaction())
-        finally:
-            loop.close()
+        result = run_async_in_new_loop(execute_retry_with_transaction())
 
         logger.info(
             "Failed jobs retry task completed",
@@ -522,7 +611,8 @@ def retry_failed_job_task(self, routing_id: str):
         async def execute_individual_retry_with_transaction():
             """Execute individual retry operation within a transaction."""
             # Create session and TransactionService
-            session = get_async_session_factory()
+            session_factory = get_async_session_factory()
+            session = session_factory()
             transaction_service = TransactionService(session)
 
             try:
@@ -560,10 +650,11 @@ def retry_failed_job_task(self, routing_id: str):
                     "retry_count": routing.retry_count,
                 }
             finally:
-                await session.close()
+                if hasattr(session, "close"):
+                    await session.close()
 
         # Execute with transaction
-        result = asyncio.run(execute_individual_retry_with_transaction())
+        result = run_async_in_new_loop(execute_individual_retry_with_transaction())
 
         logger.info(
             "Individual job retry task completed",

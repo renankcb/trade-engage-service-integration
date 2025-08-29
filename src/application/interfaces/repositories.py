@@ -44,6 +44,20 @@ class JobRoutingRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_stuck_pending_routings(
+        self, limit: int = 20, older_than_minutes: int = 5
+    ) -> List[JobRouting]:
+        """
+        Find job routings that are stuck in pending/failed status.
+
+        This method is used by the backup task to find routings that:
+        1. Have been in pending/failed status for too long
+        2. May have been missed by the OutboxWorker
+        3. Need backup processing
+        """
+        pass
+
+    @abstractmethod
     async def find_synced_for_polling(self, limit: int = 100) -> List[JobRouting]:
         """Find synced job routings that need status polling."""
         pass

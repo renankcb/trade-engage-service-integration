@@ -16,6 +16,7 @@ from src.application.services.transaction_service import TransactionService
 from src.config.logging import get_logger
 from src.domain.entities.job_routing import JobRouting
 from src.domain.exceptions.sync_error import SyncError, SyncStatusError
+from src.domain.value_objects.sync_status import SyncStatus
 
 logger = get_logger(__name__)
 
@@ -47,14 +48,73 @@ class SyncJobUseCase:
             if not job_routing:
                 raise SyncError(f"Job routing {job_routing_id} not found")
 
-            # 2. Validate sync can proceed
+            # 2. Validate sync can proceed (with fresh status check)
             if not job_routing.can_sync():
+                # Log detailed status information for debugging
+                logger.warning(
+                    "Job routing cannot be synced - status validation failed",
+                    job_routing_id=str(job_routing_id),
+                    current_status=str(job_routing.sync_status),
+                    retry_count=job_routing.retry_count,
+                    next_retry_at=job_routing.next_retry_at,
+                    total_sync_attempts=job_routing.total_sync_attempts,
+                )
+
+                # Check if this is a duplicate execution attempt
+                if job_routing.sync_status == SyncStatus.SYNCED:
+                    logger.info(
+                        "Job routing already synced - skipping duplicate execution",
+                        job_routing_id=str(job_routing_id),
+                        external_id=job_routing.external_id,
+                    )
+                    return True  # Return success for already synced jobs
+
+                if job_routing.sync_status == SyncStatus.COMPLETED:
+                    logger.info(
+                        "Job routing already completed - skipping execution",
+                        job_routing_id=str(job_routing_id),
+                    )
+                    return True  # Return success for completed jobs
+
+                # For other invalid statuses, raise error
                 raise SyncStatusError(
                     str(job_routing.sync_status),
                     "pending or failed with retries available",
                 )
 
-            # 3. Load related data
+            # 3. Mark as processing to prevent other tasks from interfering
+            # Do this BEFORE double-checking to avoid race conditions
+            try:
+                job_routing.mark_sync_started()
+                await self.job_routing_repo.update(job_routing)
+                await self.transaction_service.commit()
+                logger.info(
+                    "Job routing marked as processing",
+                    job_routing_id=str(job_routing_id),
+                    sync_attempt=job_routing.total_sync_attempts,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to mark job routing as processing",
+                    job_routing_id=str(job_routing_id),
+                    error=str(e),
+                )
+                return False
+
+            # 4. Double-check status after marking as processing (prevent race condition)
+            # Reload the routing to ensure we have the latest status
+            fresh_routing = await self.job_routing_repo.get_by_id(job_routing_id)
+            if not fresh_routing:
+                logger.error(
+                    "Job routing not found after marking as processing",
+                    job_routing_id=str(job_routing_id),
+                )
+                return False
+
+            # Use the fresh routing data
+            job_routing = fresh_routing
+
+            # 5. Load related data
             job = await self.job_repo.get_by_id(job_routing.job_id)
             if not job:
                 raise SyncError(f"Job {job_routing.job_id} not found")
@@ -69,6 +129,7 @@ class SyncJobUseCase:
                 job_id=str(job.id),
                 company=company.name,
                 provider=company.provider_type.value,
+                sync_attempt=job_routing.total_sync_attempts,
             )
 
             # 4. Get provider and create lead

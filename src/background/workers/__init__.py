@@ -7,6 +7,7 @@ import logging
 from typing import Any, Dict
 
 from src.config.logging import get_logger
+from src.config.settings import settings
 
 logger = get_logger(__name__)
 
@@ -56,10 +57,12 @@ class WorkerManager:
         try:
             self.logger.info("Starting all background workers")
 
-            # Start outbox worker (processes every 30 seconds)
+            # Start outbox worker (processes every X seconds from settings)
             outbox_worker = self._get_outbox_worker()
             outbox_task = asyncio.create_task(
-                outbox_worker.start_continuous_processing(interval_seconds=30)
+                outbox_worker.start_continuous_processing(
+                    interval_seconds=settings.BACKGROUND_WORKER_OUTBOX_INTERVAL_SECONDS
+                )
             )
             self.worker_tasks["outbox"] = outbox_task
 
@@ -70,12 +73,12 @@ class WorkerManager:
                 "SyncWorker configured for task execution only (no continuous processing)"
             )
 
-            # Start poll worker (processes every 1 minute)
+            # Start poll worker (processes every X seconds from settings)
             poll_worker = self._get_poll_worker()
             poll_task = asyncio.create_task(
                 poll_worker.start_continuous_polling(
-                    interval_seconds=60
-                )  # ✅ ALTERADO: de 300s para 60s
+                    interval_seconds=settings.BACKGROUND_WORKER_POLL_INTERVAL_SECONDS
+                )
             )
             self.worker_tasks["poll"] = poll_task
 

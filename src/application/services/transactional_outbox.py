@@ -295,3 +295,118 @@ class TransactionalOutbox:
         )
 
         return deleted_count
+
+    async def get_failed_events_for_retry(
+        self, event_type: Optional[OutboxEventType] = None, limit: int = 100
+    ) -> List[OutboxEvent]:
+        """Get failed events that can be retried."""
+        # Build query parts separately for better readability
+        select_fields = """
+            id, event_type, aggregate_id, event_data, status,
+            retry_count, max_retries, created_at, processed_at, error_message
+        """
+
+        from_table = "FROM outbox_events"
+
+        where_clause = """
+            WHERE status = :failed_status
+            AND retry_count < max_retries
+            AND (
+                processed_at IS NULL
+                OR processed_at < NOW() - INTERVAL '5 minutes'
+            )
+        """
+        params = {"failed_status": OutboxEventStatus.FAILED.value}
+
+        if event_type:
+            where_clause += " AND event_type = :event_type"
+            params["event_type"] = event_type.value
+
+        order_by = "ORDER BY created_at ASC"
+        limit_clause = "LIMIT :limit"
+
+        # Construct the complete query
+        stmt = text(
+            f"""
+            SELECT {select_fields}
+            {from_table}
+            {where_clause}
+            {order_by}
+            {limit_clause}
+            """
+        )
+
+        params["limit"] = limit
+
+        try:
+            result = await self.db_session.execute(stmt, params)
+
+            events = []
+            for row in result.fetchall():
+                # PostgreSQL JSON columns are automatically deserialized to Python objects
+                # So row[3] (event_data) is already a dict, not a JSON string
+                event_data = row[3] if isinstance(row[3], dict) else json.loads(row[3])
+
+                event = OutboxEvent(
+                    id=row[0],
+                    event_type=OutboxEventType(row[1]),
+                    aggregate_id=row[2],
+                    event_data=event_data,
+                    status=OutboxEventStatus(row[4]),
+                    retry_count=row[5],
+                    max_retries=row[6],
+                    created_at=row[7],
+                    processed_at=row[8],
+                    error_message=row[9],
+                )
+                events.append(event)
+
+            self.logger.info(
+                "Retrieved failed events for retry",
+                count=len(events),
+                event_type=event_type.value if event_type else None,
+                limit=limit,
+            )
+
+            return events
+
+        except Exception as e:
+            self.logger.error(
+                "Error retrieving failed events for retry",
+                error=str(e),
+                event_type=event_type.value if event_type else None,
+                limit=limit,
+                exc_info=True,
+            )
+            raise
+
+    async def reset_event_for_retry(self, event_id: UUID) -> bool:
+        """Reset a failed event to pending status for retry."""
+        stmt = text(
+            """
+            UPDATE outbox_events
+            SET status = :status, processed_at = NULL, error_message = NULL
+            WHERE id = :event_id AND status = :failed_status
+            RETURNING id
+        """
+        )
+
+        result = await self.db_session.execute(
+            stmt,
+            {
+                "event_id": event_id,
+                "status": OutboxEventStatus.PENDING.value,
+                "failed_status": OutboxEventStatus.FAILED.value,
+            },
+        )
+
+        await self.db_session.commit()
+
+        success = result.rowcount > 0
+        if success:
+            self.logger.info(
+                "Event reset for retry",
+                event_id=str(event_id),
+            )
+
+        return success

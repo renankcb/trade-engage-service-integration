@@ -98,6 +98,60 @@ class JobRoutingRepository(JobRoutingRepositoryInterface):
 
         return [self._model_to_entity(model) for model in models]
 
+    async def find_stuck_pending_routings(
+        self, limit: int = 20, older_than_minutes: int = 5
+    ) -> List[JobRouting]:
+        """
+        Find job routings that are stuck in pending/failed status.
+
+        This method is used by the backup task to find routings that:
+        1. Have been in pending/failed status for too long
+        2. May have been missed by the OutboxWorker
+        3. Need backup processing
+
+        Args:
+            limit: Maximum number of routings to return
+            older_than_minutes: Only return routings older than this many minutes
+
+        Returns:
+            List of stuck job routings
+        """
+        # Calculate the cutoff time
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
+
+        stmt = (
+            select(JobRoutingModel)
+            .where(
+                and_(
+                    JobRoutingModel.sync_status.in_(
+                        [SyncStatus.PENDING.value, SyncStatus.FAILED.value]
+                    ),
+                    JobRoutingModel.retry_count < 3,  # Max retries
+                    JobRoutingModel.updated_at < cutoff_time,  # Older than cutoff
+                    # Exclude routings that are currently being processed
+                    JobRoutingModel.sync_status != SyncStatus.PROCESSING.value,
+                )
+            )
+            .options(selectinload(JobRoutingModel.job))
+            .options(selectinload(JobRoutingModel.company_received))
+            .order_by(JobRoutingModel.updated_at.asc())  # Process oldest first
+            .limit(limit)
+        )
+
+        result = await self.db.execute(stmt)
+        models = result.scalars().all()
+
+        stuck_routings = [self._model_to_entity(model) for model in models]
+
+        logger.info(
+            "Found stuck pending routings",
+            count=len(stuck_routings),
+            older_than_minutes=older_than_minutes,
+            limit=limit,
+        )
+
+        return stuck_routings
+
     async def claim_pending_routings(self, limit: int = 50) -> List[JobRouting]:
         """Claim pending routings atomically to prevent duplicates.
 
